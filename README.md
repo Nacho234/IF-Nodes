@@ -39,6 +39,8 @@ cp .env.example .env
 
 # 3. Base de datos y Redis
 npm run db:up            # docker compose up -d (postgres + redis)
+#    Sin Docker: brew install postgresql@16 redis && brew services start postgresql@16 redis
+#    y crear el rol/DB: psql -d postgres -c "CREATE ROLE ifnodes LOGIN PASSWORD 'ifnodes_dev' CREATEDB;" && createdb -O ifnodes ifnodes
 
 # 4. Esquema y datos demo
 npm run db:generate      # prisma generate
@@ -48,8 +50,9 @@ npm run db:seed          # usuario owner + cliente y proyecto demo
 # 5. Compilar los packages compartidos
 npm run build:packages
 
-# 6. Levantar (en dos terminales)
+# 6. Levantar (en tres terminales)
 npm run dev:api          # http://localhost:3001
+npm run dev:worker       # consumidor de la cola de ejecuciones
 npm run dev:web          # http://localhost:3000
 ```
 
@@ -74,4 +77,4 @@ Entrar a http://localhost:3000 → **Ingreso de desarrollo** con tu email autori
 
 ## Estado actual
 
-Fase 1 completa + base de Fase 2 (constructor con 3 nodos demo, guardado y validación). El motor de ejecución, simulador, casos de prueba, integraciones, versionado y exportador siguen el orden de fases de [PROJECT_PLAN.md](PROJECT_PLAN.md). El detalle fino y las verificaciones están en [PROGRESS.md](PROGRESS.md).
+Fases 1 y 2 completas y el núcleo de las Fases 3–4 operativo: constructor con autosave/undo/copy-paste/notas, motor de ejecución testeado (54 tests unitarios), worker BullMQ, ejecuciones con historial por paso y debugging en vivo desde el constructor. Simulador, casos de prueba, integraciones, versionado y exportador siguen el orden de fases de [PROJECT_PLAN.md](PROJECT_PLAN.md). Verificaciones al día en [PROGRESS.md](PROGRESS.md).

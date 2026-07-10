@@ -2,7 +2,7 @@
 
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { AlertTriangle, EyeOff } from 'lucide-react';
+import { AlertTriangle, Check, EyeOff, Loader2, MinusCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useBuilderStore, type BuilderNode } from './store';
 import { categoryColor, nodeIcon } from './node-visuals';
@@ -16,11 +16,29 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<BuilderNode>) {
   const hasConfigIssue = useBuilderStore((state) =>
     state.configIssues.some((issue) => issue.nodeId === id),
   );
+  // Estado del nodo en la última ejecución de prueba (iluminado en vivo)
+  const runStep = useBuilderStore((state) => {
+    const steps = state.activeExecution?.steps;
+    if (!steps) return undefined;
+    for (let i = steps.length - 1; i >= 0; i--) {
+      if (steps[i]?.nodeId === id) return steps[i];
+    }
+    return undefined;
+  });
 
   const Icon = nodeIcon(info?.icon ?? '');
   const color = categoryColor(info?.category ?? '');
   const inputs = info?.inputs ?? [{ id: 'main', label: 'Entrada' }];
   const outputs = info?.outputs ?? [];
+
+  const runRing =
+    runStep?.status === 'RUNNING'
+      ? 'ring-2 ring-[var(--brand-accent)]'
+      : runStep?.status === 'SUCCEEDED'
+        ? 'ring-2 ring-[var(--color-success)]'
+        : runStep?.status === 'FAILED'
+          ? 'ring-2 ring-[var(--color-danger)]'
+          : '';
 
   return (
     <div
@@ -30,6 +48,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<BuilderNode>) {
           ? 'border-[var(--node-border-selected)] shadow-lg ring-1 ring-[var(--node-border-selected)]'
           : 'border-[var(--node-border)] hover:shadow-md',
         data.disabled && 'opacity-50',
+        runRing,
       )}
       style={{ borderTopWidth: 3, borderTopColor: color }}
     >
@@ -59,6 +78,38 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<BuilderNode>) {
           ) : null}
         </div>
       </div>
+
+      {/* Resultado de la última ejecución (estado con icono + texto, no solo color) */}
+      {runStep ? (
+        <div
+          className={cn(
+            'flex items-center gap-1.5 border-t px-3 py-1 font-mono text-[10px]',
+            runStep.status === 'RUNNING' && 'border-accent-soft text-accent',
+            runStep.status === 'SUCCEEDED' && 'border-success-soft text-success',
+            runStep.status === 'FAILED' && 'border-danger-soft text-danger',
+            (runStep.status === 'SKIPPED' || runStep.status === 'CANCELLED') &&
+              'border-border text-faint-foreground',
+          )}
+        >
+          {runStep.status === 'RUNNING' ? (
+            <>
+              <Loader2 className="size-3 animate-spin" /> ejecutando…
+            </>
+          ) : runStep.status === 'SUCCEEDED' ? (
+            <>
+              <Check className="size-3" /> ok · {runStep.durationMs ?? 0} ms
+            </>
+          ) : runStep.status === 'FAILED' ? (
+            <>
+              <X className="size-3" /> falló{runStep.error ? ` · ${runStep.error.code}` : ''}
+            </>
+          ) : (
+            <>
+              <MinusCircle className="size-3" /> {runStep.status === 'SKIPPED' ? 'omitido' : 'cancelado'}
+            </>
+          )}
+        </div>
+      ) : null}
 
       {/* Puertos de entrada */}
       {inputs.map((port, index) => (

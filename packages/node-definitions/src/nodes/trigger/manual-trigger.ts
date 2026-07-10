@@ -46,8 +46,13 @@ export const manualTriggerNode = defineNode<Config, unknown, Record<string, unkn
   documentation:
     'Punto de entrada para ejecuciones a demanda desde el builder. En el runtime exportado equivale a una invocación directa del flujo.',
   async execute({ config, input }) {
-    // Si la ejecución trae un payload real (p.ej. desde el simulador), tiene prioridad.
-    if (input !== undefined && input !== null && typeof input === 'object') {
+    // Un payload real no vacío (p.ej. del simulador) tiene prioridad sobre el de ejemplo.
+    if (
+      input !== undefined &&
+      input !== null &&
+      typeof input === 'object' &&
+      Object.keys(input).length > 0
+    ) {
       return { output: input as Record<string, unknown> };
     }
     try {

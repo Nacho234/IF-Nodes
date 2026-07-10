@@ -5,9 +5,17 @@ import { Button } from '@/components/ui/button';
 import { CodeTextarea, Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/misc';
-import { useBuilderStore } from './store';
+import { isFlowNode, useBuilderStore } from './store';
 import { categoryColor, nodeIcon } from './node-visuals';
 import type { NodeTypeInfo } from '@/lib/types';
+
+function JsonPreview({ value }: { value: unknown }) {
+  return (
+    <pre className="max-h-40 overflow-auto rounded-md border border-border bg-surface-sunken p-2 font-mono text-[10.5px] leading-4 whitespace-pre-wrap">
+      {value === undefined ? '—' : JSON.stringify(value, null, 2)}
+    </pre>
+  );
+}
 
 /**
  * Panel derecho: configuración del nodo seleccionado.
@@ -16,8 +24,19 @@ import type { NodeTypeInfo } from '@/lib/types';
  */
 export function ConfigPanel() {
   const selectedNodeId = useBuilderStore((state) => state.selectedNodeId);
-  const node = useBuilderStore((state) => state.nodes.find((n) => n.id === state.selectedNodeId));
+  const node = useBuilderStore((state) => {
+    const found = state.nodes.find((n) => n.id === state.selectedNodeId);
+    return found && isFlowNode(found) ? found : undefined;
+  });
   const info = useBuilderStore((state) => (node ? state.nodeTypes.get(node.data.nodeType) : undefined));
+  const lastStep = useBuilderStore((state) => {
+    const steps = state.activeExecution?.steps;
+    if (!steps || !state.selectedNodeId) return undefined;
+    for (let i = steps.length - 1; i >= 0; i--) {
+      if (steps[i]?.nodeId === state.selectedNodeId) return steps[i];
+    }
+    return undefined;
+  });
   const configIssues = useBuilderStore((state) =>
     state.configIssues.filter((issue) => issue.nodeId === selectedNodeId),
   );
@@ -174,6 +193,33 @@ export function ConfigPanel() {
                 </li>
               ))}
             </ul>
+          </div>
+        ) : null}
+
+        {/* Última ejecución de este nodo */}
+        {lastStep ? (
+          <div className="space-y-2 border-t border-border pt-4">
+            <p className="text-[10px] font-semibold tracking-widest text-faint-foreground uppercase">
+              Última ejecución · {lastStep.status}
+              {typeof lastStep.durationMs === 'number' ? ` · ${lastStep.durationMs} ms` : ''}
+              {lastStep.attempt > 1 ? ` · intento ${lastStep.attempt}` : ''}
+            </p>
+            <div className="space-y-1.5">
+              <Label>Entrada recibida</Label>
+              <JsonPreview value={lastStep.input} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Salida generada</Label>
+              <JsonPreview value={lastStep.output} />
+            </div>
+            {lastStep.error ? (
+              <div className="space-y-1.5">
+                <Label className="text-danger">Error</Label>
+                <p className="rounded-md bg-danger-soft px-2.5 py-1.5 text-[11.5px] text-danger">
+                  <code className="font-mono text-[10.5px]">{lastStep.error.code}</code> — {lastStep.error.message}
+                </p>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

@@ -12,6 +12,17 @@ export const graphPositionSchema = z.object({
   y: z.number().finite(),
 });
 
+/** Manejo de errores por nodo; el motor aplica defaults si falta. */
+export const nodeErrorPolicySchema = z.object({
+  strategy: z.enum(['stop', 'continue', 'retry', 'error-output', 'fallback']),
+  retries: z.number().int().min(0).max(10).optional(),
+  retryDelayMs: z.number().int().min(0).max(600_000).optional(),
+  backoff: z.enum(['fixed', 'exponential']).optional(),
+  timeoutMs: z.number().int().min(100).max(600_000).optional(),
+  fallbackValue: z.unknown().optional(),
+});
+export type NodeErrorPolicy = z.infer<typeof nodeErrorPolicySchema>;
+
 export const graphNodeSchema = z.object({
   id: z.string().min(1).max(64),
   /** Tipo registrado en node-definitions, p.ej. "trigger.manual" */
@@ -25,6 +36,7 @@ export const graphNodeSchema = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
   disabled: z.boolean().default(false),
   notes: z.string().max(2000).default(''),
+  errorPolicy: nodeErrorPolicySchema.optional(),
 });
 
 export const graphEdgeSchema = z.object({

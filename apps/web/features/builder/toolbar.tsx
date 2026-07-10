@@ -1,7 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { AlertTriangle, ArrowLeft, Check, CircleAlert, Loader2, ShieldCheck } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Check,
+  CircleAlert,
+  ExternalLink,
+  Loader2,
+  Play,
+  Redo2,
+  ShieldCheck,
+  StickyNote,
+  Undo2,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -15,29 +27,49 @@ import { timeAgo } from '@/lib/utils';
 import { useBuilderStore } from './store';
 import type { WorkflowDetail } from '@/lib/types';
 
-/** Barra superior del constructor: contexto, estado de guardado y validación. */
+const RUN_STATUS_LABEL: Record<string, string> = {
+  QUEUED: 'en cola',
+  RUNNING: 'ejecutando…',
+  SUCCEEDED: 'exitosa',
+  FAILED: 'falló',
+  CANCELLED: 'cancelada',
+  TIMED_OUT: 'timeout',
+};
+
+/** Barra superior del constructor: contexto, guardado, validación y ejecución. */
 export function BuilderToolbar({
   workflow,
   onValidate,
   onSaveNow,
+  onRun,
+  onAddNote,
   validating,
+  running,
 }: {
   workflow: WorkflowDetail;
   onValidate: () => void;
   onSaveNow: () => void;
+  onRun: () => void;
+  onAddNote: () => void;
   validating: boolean;
+  running: boolean;
 }) {
   const saveState = useBuilderStore((state) => state.saveState);
   const lastSavedAt = useBuilderStore((state) => state.lastSavedAt);
   const structureIssues = useBuilderStore((state) => state.structureIssues);
   const configIssues = useBuilderStore((state) => state.configIssues);
+  const activeExecution = useBuilderStore((state) => state.activeExecution);
+  const canUndo = useBuilderStore((state) => state.past.length > 0);
+  const canRedo = useBuilderStore((state) => state.future.length > 0);
+  const undo = useBuilderStore((state) => state.undo);
+  const redo = useBuilderStore((state) => state.redo);
 
   const errors = structureIssues.filter((issue) => issue.level === 'error');
   const warnings = structureIssues.filter((issue) => issue.level === 'warning');
   const totalIssues = structureIssues.length + configIssues.length;
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface px-3">
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-surface px-3">
       <Tooltip content="Volver al proyecto">
         <Link
           href={`/projects/${workflow.projectId}`}
@@ -58,6 +90,25 @@ export function BuilderToolbar({
           {workflow.project.client.name} · borrador
           {workflow.versions.length > 0 ? ` · última versión v${workflow.versions[0]?.number}` : ' · sin versiones'}
         </p>
+      </div>
+
+      {/* Undo / Redo / Nota */}
+      <div className="ml-2 flex items-center gap-0.5 border-l border-border pl-2">
+        <Tooltip content="Deshacer (⌘Z)">
+          <Button variant="ghost" size="icon-sm" aria-label="Deshacer" disabled={!canUndo} onClick={undo}>
+            <Undo2 />
+          </Button>
+        </Tooltip>
+        <Tooltip content="Rehacer (⇧⌘Z)">
+          <Button variant="ghost" size="icon-sm" aria-label="Rehacer" disabled={!canRedo} onClick={redo}>
+            <Redo2 />
+          </Button>
+        </Tooltip>
+        <Tooltip content="Agregar nota al lienzo">
+          <Button variant="ghost" size="icon-sm" aria-label="Agregar nota" onClick={onAddNote}>
+            <StickyNote />
+          </Button>
+        </Tooltip>
       </div>
 
       <div className="ml-auto flex items-center gap-2">
@@ -90,6 +141,28 @@ export function BuilderToolbar({
             'cargando…'
           )}
         </span>
+
+        {/* Última ejecución de prueba */}
+        {activeExecution ? (
+          <Link
+            href={`/executions/${activeExecution.id}`}
+            className="flex items-center gap-1 font-mono text-[11px] hover:underline"
+          >
+            <Badge
+              variant={
+                activeExecution.status === 'SUCCEEDED'
+                  ? 'success'
+                  : activeExecution.status === 'FAILED' || activeExecution.status === 'TIMED_OUT'
+                    ? 'danger'
+                    : 'accent'
+              }
+              dot
+            >
+              prueba {RUN_STATUS_LABEL[activeExecution.status] ?? activeExecution.status}
+            </Badge>
+            <ExternalLink className="size-3 text-faint-foreground" />
+          </Link>
+        ) : null}
 
         {/* Resultado de validación */}
         {totalIssues > 0 ? (
@@ -139,11 +212,9 @@ export function BuilderToolbar({
           <ShieldCheck /> Validar
         </Button>
 
-        <Tooltip content="Ejecutar y publicar llegan con el motor (Fases 3 y 8) — ver PROJECT_PLAN.md">
-          <span className="cursor-help font-mono text-[10px] tracking-wide text-faint-foreground uppercase">
-            motor: fase 3
-          </span>
-        </Tooltip>
+        <Button variant="primary" size="sm" onClick={onRun} loading={running}>
+          <Play /> Ejecutar
+        </Button>
       </div>
     </header>
   );

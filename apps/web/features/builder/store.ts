@@ -11,9 +11,9 @@ import {
   type NodeChange,
 } from '@xyflow/react';
 import type { WorkflowGraph } from '@ifnodes/shared';
-import type { GraphIssueDto, NodeConfigIssueDto, NodeTypeInfo } from '@/lib/types';
+import type { ExecutionDetail, GraphIssueDto, NodeConfigIssueDto, NodeTypeInfo } from '@/lib/types';
 
-/** Datos que viajan dentro de cada nodo de React Flow */
+/** Datos de un nodo de flujo */
 export interface FlowNodeData extends Record<string, unknown> {
   nodeType: string;
   nodeVersion: number;
@@ -23,15 +23,38 @@ export interface FlowNodeData extends Record<string, unknown> {
   notes: string;
 }
 
+/** Datos de una nota adhesiva del lienzo */
+export interface NoteNodeData extends Record<string, unknown> {
+  text: string;
+}
+
 export type BuilderNode = Node<FlowNodeData, 'ifn'>;
+export type NoteNode = Node<NoteNodeData, 'note'>;
+export type CanvasNode = BuilderNode | NoteNode;
 export type SaveState = 'loading' | 'saved' | 'dirty' | 'saving' | 'error';
+
+export function isFlowNode(node: CanvasNode): node is BuilderNode {
+  return node.type === 'ifn';
+}
 
 function generateId(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+interface HistoryEntry {
+  nodes: CanvasNode[];
+  edges: Edge[];
+}
+
+interface Clipboard {
+  nodes: CanvasNode[];
+  edges: Edge[];
+}
+
+const HISTORY_LIMIT = 50;
+
 interface BuilderState {
-  nodes: BuilderNode[];
+  nodes: CanvasNode[];
   edges: Edge[];
   nodeTypes: Map<string, NodeTypeInfo>;
   selectedNodeId: string | null;
@@ -41,36 +64,67 @@ interface BuilderState {
   structureIssues: GraphIssueDto[];
   configIssues: NodeConfigIssueDto[];
   lastSavedAt: string | null;
+  /** Última ejecución de prueba (para iluminar nodos e inspeccionar pasos) */
+  activeExecution: ExecutionDetail | null;
+  past: HistoryEntry[];
+  future: HistoryEntry[];
+  clipboard: Clipboard | null;
+  dragSnapshotTaken: boolean;
 
   initialize(graph: WorkflowGraph, nodeTypes: NodeTypeInfo[]): void;
-  onNodesChange(changes: NodeChange<BuilderNode>[]): void;
+  onNodesChange(changes: NodeChange<CanvasNode>[]): void;
   onEdgesChange(changes: EdgeChange[]): void;
   onConnect(connection: Connection): void;
   addNode(type: string, position: { x: number; y: number }): void;
+  addNote(position: { x: number; y: number }): void;
   updateNodeData(nodeId: string, patch: Partial<FlowNodeData>): void;
+  updateNoteText(nodeId: string, text: string): void;
   duplicateNode(nodeId: string): void;
   removeNode(nodeId: string): void;
+  copySelection(): void;
+  paste(): void;
+  undo(): void;
+  redo(): void;
   setSelected(nodeId: string | null): void;
   setSaveState(state: SaveState): void;
   setIssues(structure: GraphIssueDto[], config: NodeConfigIssueDto[]): void;
   markSaved(savedAt: string): void;
+  setActiveExecution(execution: ExecutionDetail | null): void;
   toGraph(): WorkflowGraph;
 }
 
-export const useBuilderStore = create<BuilderState>((set, get) => ({
-  nodes: [],
-  edges: [],
-  nodeTypes: new Map(),
-  selectedNodeId: null,
-  saveState: 'loading',
-  revision: 0,
-  structureIssues: [],
-  configIssues: [],
-  lastSavedAt: null,
+export const useBuilderStore = create<BuilderState>((set, get) => {
+  /** Snapshot para undo; limpiar el futuro (nueva línea de tiempo) */
+  const snapshot = () => {
+    const { nodes, edges, past } = get();
+    const entry: HistoryEntry = {
+      nodes: nodes.map((node) => ({ ...node, data: structuredClone(node.data) }) as CanvasNode),
+      edges: edges.map((edge) => ({ ...edge })),
+    };
+    set({ past: [...past.slice(-(HISTORY_LIMIT - 1)), entry], future: [] });
+  };
 
-  initialize(graph, nodeTypes) {
-    set({
-      nodes: graph.nodes.map((node) => ({
+  const mutate = (partial: Partial<BuilderState>) =>
+    set((state) => ({ ...partial, revision: state.revision + 1, saveState: 'dirty' as const }));
+
+  return {
+    nodes: [],
+    edges: [],
+    nodeTypes: new Map(),
+    selectedNodeId: null,
+    saveState: 'loading',
+    revision: 0,
+    structureIssues: [],
+    configIssues: [],
+    lastSavedAt: null,
+    activeExecution: null,
+    past: [],
+    future: [],
+    clipboard: null,
+    dragSnapshotTaken: false,
+
+    initialize(graph, nodeTypes) {
+      const flowNodes: CanvasNode[] = graph.nodes.map((node) => ({
         id: node.id,
         type: 'ifn' as const,
         position: node.position,
@@ -82,57 +136,89 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
           disabled: node.disabled,
           notes: node.notes,
         },
-      })),
-      edges: graph.edges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        sourceHandle: edge.sourcePort,
-        target: edge.target,
-        targetHandle: edge.targetPort,
-      })),
-      nodeTypes: new Map(nodeTypes.map((info) => [info.type, info])),
-      saveState: 'saved',
-      revision: 0,
-      selectedNodeId: null,
-    });
-  },
+      }));
+      const noteNodes: CanvasNode[] = graph.stickyNotes.map((note) => ({
+        id: note.id,
+        type: 'note' as const,
+        position: note.position,
+        data: { text: note.text },
+      }));
+      set({
+        nodes: [...flowNodes, ...noteNodes],
+        edges: graph.edges.map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          sourceHandle: edge.sourcePort,
+          target: edge.target,
+          targetHandle: edge.targetPort,
+        })),
+        nodeTypes: new Map(nodeTypes.map((info) => [info.type, info])),
+        saveState: 'saved',
+        revision: 0,
+        selectedNodeId: null,
+        activeExecution: null,
+        past: [],
+        future: [],
+      });
+    },
 
-  onNodesChange(changes) {
-    const structural = changes.some((change) => change.type === 'remove' || change.type === 'position');
-    set((state) => ({
-      nodes: applyNodeChanges(changes, state.nodes),
-      ...(structural ? { revision: state.revision + 1, saveState: 'dirty' as const } : {}),
-    }));
-    // Si se eliminó el nodo seleccionado, limpiar selección
-    const removed = changes.filter((change) => change.type === 'remove').map((change) => change.id);
-    if (removed.length > 0 && removed.includes(get().selectedNodeId ?? '')) {
-      set({ selectedNodeId: null });
-    }
-  },
+    onNodesChange(changes) {
+      // Snapshot al empezar un arrastre (una sola vez por gesto)
+      const dragStart = changes.some(
+        (change) => change.type === 'position' && change.dragging === true,
+      );
+      const dragEnd = changes.some(
+        (change) => change.type === 'position' && change.dragging === false,
+      );
+      if (dragStart && !get().dragSnapshotTaken) {
+        snapshot();
+        set({ dragSnapshotTaken: true });
+      }
+      if (dragEnd) set({ dragSnapshotTaken: false });
 
-  onEdgesChange(changes) {
-    const structural = changes.some((change) => change.type === 'remove');
-    set((state) => ({
-      edges: applyEdgeChanges(changes, state.edges),
-      ...(structural ? { revision: state.revision + 1, saveState: 'dirty' as const } : {}),
-    }));
-  },
+      const removals = changes.filter((change) => change.type === 'remove');
+      if (removals.length > 0 && !get().dragSnapshotTaken) snapshot();
 
-  onConnect(connection) {
-    if (!connection.source || !connection.target) return;
-    if (connection.source === connection.target) return;
-    set((state) => {
-      const exists = state.edges.some(
+      const structural = changes.some((change) => change.type === 'remove' || change.type === 'position');
+      set((state) => ({
+        nodes: applyNodeChanges(changes, state.nodes),
+        ...(structural ? { revision: state.revision + 1, saveState: 'dirty' as const } : {}),
+      }));
+      const removedIds = removals.map((change) => change.id);
+      if (removedIds.includes(get().selectedNodeId ?? '')) set({ selectedNodeId: null });
+      if (removedIds.length > 0) {
+        set((state) => ({
+          edges: state.edges.filter(
+            (edge) => !removedIds.includes(edge.source) && !removedIds.includes(edge.target),
+          ),
+        }));
+      }
+    },
+
+    onEdgesChange(changes) {
+      const structural = changes.some((change) => change.type === 'remove');
+      if (structural) snapshot();
+      set((state) => ({
+        edges: applyEdgeChanges(changes, state.edges),
+        ...(structural ? { revision: state.revision + 1, saveState: 'dirty' as const } : {}),
+      }));
+    },
+
+    onConnect(connection) {
+      if (!connection.source || !connection.target) return;
+      if (connection.source === connection.target) return;
+      const exists = get().edges.some(
         (edge) =>
           edge.source === connection.source &&
           edge.target === connection.target &&
           (edge.sourceHandle ?? 'main') === (connection.sourceHandle ?? 'main') &&
           (edge.targetHandle ?? 'main') === (connection.targetHandle ?? 'main'),
       );
-      if (exists) return state;
-      return {
+      if (exists) return;
+      snapshot();
+      mutate({
         edges: [
-          ...state.edges,
+          ...get().edges,
           {
             id: generateId('edge'),
             source: connection.source,
@@ -141,118 +227,212 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
             targetHandle: connection.targetHandle ?? 'main',
           },
         ],
-        revision: state.revision + 1,
-        saveState: 'dirty' as const,
-      };
-    });
-  },
+      });
+    },
 
-  addNode(type, position) {
-    const info = get().nodeTypes.get(type);
-    if (!info) return;
-    const id = generateId('node');
-    set((state) => ({
-      nodes: [
-        ...state.nodes,
-        {
-          id,
-          type: 'ifn' as const,
-          position,
-          data: {
-            nodeType: info.type,
-            nodeVersion: info.version,
-            name: info.displayName,
-            config: structuredClone(info.defaultConfig),
-            disabled: false,
-            notes: '',
+    addNode(type, position) {
+      const info = get().nodeTypes.get(type);
+      if (!info) return;
+      snapshot();
+      const id = generateId('node');
+      mutate({
+        nodes: [
+          ...get().nodes,
+          {
+            id,
+            type: 'ifn' as const,
+            position,
+            data: {
+              nodeType: info.type,
+              nodeVersion: info.version,
+              name: info.displayName,
+              config: structuredClone(info.defaultConfig),
+              disabled: false,
+              notes: '',
+            },
           },
+        ],
+        selectedNodeId: id,
+      });
+    },
+
+    addNote(position) {
+      snapshot();
+      const id = generateId('note');
+      mutate({
+        nodes: [...get().nodes, { id, type: 'note' as const, position, data: { text: '' } }],
+      });
+    },
+
+    updateNodeData(nodeId, patch) {
+      mutate({
+        nodes: get().nodes.map((node) =>
+          node.id === nodeId && isFlowNode(node) ? { ...node, data: { ...node.data, ...patch } } : node,
+        ),
+      });
+    },
+
+    updateNoteText(nodeId, text) {
+      mutate({
+        nodes: get().nodes.map((node) =>
+          node.id === nodeId && node.type === 'note' ? { ...node, data: { text } } : node,
+        ),
+      });
+    },
+
+    duplicateNode(nodeId) {
+      const original = get().nodes.find((node) => node.id === nodeId);
+      if (!original || !isFlowNode(original)) return;
+      snapshot();
+      const id = generateId('node');
+      mutate({
+        nodes: [
+          ...get().nodes,
+          {
+            ...original,
+            id,
+            position: { x: original.position.x + 48, y: original.position.y + 48 },
+            selected: false,
+            data: {
+              ...original.data,
+              config: structuredClone(original.data.config),
+              name: `${original.data.name} (copia)`,
+            },
+          },
+        ],
+        selectedNodeId: id,
+      });
+    },
+
+    removeNode(nodeId) {
+      snapshot();
+      mutate({
+        nodes: get().nodes.filter((node) => node.id !== nodeId),
+        edges: get().edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
+        selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
+      });
+    },
+
+    copySelection() {
+      const selected = get().nodes.filter((node) => node.selected);
+      if (selected.length === 0) return;
+      const ids = new Set(selected.map((node) => node.id));
+      set({
+        clipboard: {
+          nodes: selected.map((node) => ({ ...node, data: structuredClone(node.data) }) as CanvasNode),
+          edges: get().edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)),
         },
-      ],
-      selectedNodeId: id,
-      revision: state.revision + 1,
-      saveState: 'dirty' as const,
-    }));
-  },
+      });
+    },
 
-  updateNodeData(nodeId, patch) {
-    set((state) => ({
-      nodes: state.nodes.map((node) =>
-        node.id === nodeId ? { ...node, data: { ...node.data, ...patch } } : node,
-      ),
-      revision: state.revision + 1,
-      saveState: 'dirty' as const,
-    }));
-  },
-
-  duplicateNode(nodeId) {
-    const original = get().nodes.find((node) => node.id === nodeId);
-    if (!original) return;
-    const id = generateId('node');
-    set((state) => ({
-      nodes: [
-        ...state.nodes,
-        {
-          ...original,
+    paste() {
+      const { clipboard } = get();
+      if (!clipboard || clipboard.nodes.length === 0) return;
+      snapshot();
+      const idMap = new Map<string, string>();
+      const pastedNodes = clipboard.nodes.map((node) => {
+        const id = generateId(node.type === 'note' ? 'note' : 'node');
+        idMap.set(node.id, id);
+        return {
+          ...node,
           id,
-          position: { x: original.position.x + 48, y: original.position.y + 48 },
-          selected: false,
-          data: { ...original.data, config: structuredClone(original.data.config), name: `${original.data.name} (copia)` },
-        },
-      ],
-      selectedNodeId: id,
-      revision: state.revision + 1,
-      saveState: 'dirty' as const,
-    }));
-  },
+          position: { x: node.position.x + 60, y: node.position.y + 60 },
+          selected: true,
+          data: structuredClone(node.data),
+        } as CanvasNode;
+      });
+      const pastedEdges = clipboard.edges.map((edge) => ({
+        ...edge,
+        id: generateId('edge'),
+        source: idMap.get(edge.source) as string,
+        target: idMap.get(edge.target) as string,
+      }));
+      mutate({
+        nodes: [
+          ...get().nodes.map((node) => ({ ...node, selected: false }) as CanvasNode),
+          ...pastedNodes,
+        ],
+        edges: [...get().edges, ...pastedEdges],
+      });
+    },
 
-  removeNode(nodeId) {
-    set((state) => ({
-      nodes: state.nodes.filter((node) => node.id !== nodeId),
-      edges: state.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
-      selectedNodeId: state.selectedNodeId === nodeId ? null : state.selectedNodeId,
-      revision: state.revision + 1,
-      saveState: 'dirty' as const,
-    }));
-  },
+    undo() {
+      const { past, nodes, edges, future } = get();
+      const previous = past[past.length - 1];
+      if (!previous) return;
+      mutate({
+        past: past.slice(0, -1),
+        future: [...future, { nodes, edges }].slice(-HISTORY_LIMIT),
+        nodes: previous.nodes,
+        edges: previous.edges,
+        selectedNodeId: null,
+      });
+    },
 
-  setSelected(nodeId) {
-    set({ selectedNodeId: nodeId });
-  },
+    redo() {
+      const { future, nodes, edges, past } = get();
+      const next = future[future.length - 1];
+      if (!next) return;
+      mutate({
+        future: future.slice(0, -1),
+        past: [...past, { nodes, edges }].slice(-HISTORY_LIMIT),
+        nodes: next.nodes,
+        edges: next.edges,
+        selectedNodeId: null,
+      });
+    },
 
-  setSaveState(saveState) {
-    set({ saveState });
-  },
+    setSelected(nodeId) {
+      set({ selectedNodeId: nodeId });
+    },
 
-  setIssues(structureIssues, configIssues) {
-    set({ structureIssues, configIssues });
-  },
+    setSaveState(saveState) {
+      set({ saveState });
+    },
 
-  markSaved(savedAt) {
-    set({ saveState: 'saved', lastSavedAt: savedAt });
-  },
+    setIssues(structureIssues, configIssues) {
+      set({ structureIssues, configIssues });
+    },
 
-  toGraph() {
-    const { nodes, edges } = get();
-    return {
-      nodes: nodes.map((node) => ({
-        id: node.id,
-        type: node.data.nodeType,
-        nodeVersion: node.data.nodeVersion,
-        name: node.data.name || node.data.nodeType,
-        position: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
-        config: node.data.config,
-        disabled: node.data.disabled,
-        notes: node.data.notes,
-      })),
-      edges: edges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        sourcePort: edge.sourceHandle ?? 'main',
-        target: edge.target,
-        targetPort: edge.targetHandle ?? 'main',
-      })),
-      stickyNotes: [],
-      groups: [],
-    };
-  },
-}));
+    markSaved(savedAt) {
+      set({ saveState: 'saved', lastSavedAt: savedAt });
+    },
+
+    setActiveExecution(activeExecution) {
+      set({ activeExecution });
+    },
+
+    toGraph() {
+      const { nodes, edges } = get();
+      return {
+        nodes: nodes.filter(isFlowNode).map((node) => ({
+          id: node.id,
+          type: node.data.nodeType,
+          nodeVersion: node.data.nodeVersion,
+          name: node.data.name || node.data.nodeType,
+          position: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
+          config: node.data.config,
+          disabled: node.data.disabled,
+          notes: node.data.notes,
+        })),
+        edges: edges.map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          sourcePort: edge.sourceHandle ?? 'main',
+          target: edge.target,
+          targetPort: edge.targetHandle ?? 'main',
+        })),
+        stickyNotes: nodes
+          .filter((node): node is NoteNode => node.type === 'note')
+          .map((note) => ({
+            id: note.id,
+            position: { x: Math.round(note.position.x), y: Math.round(note.position.y) },
+            width: 240,
+            height: 120,
+            text: note.data.text,
+          })),
+        groups: [],
+      };
+    },
+  };
+});

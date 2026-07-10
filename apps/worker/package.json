@@ -1,5 +1,5 @@
 {
-  "name": "@ifnodes/api",
+  "name": "@ifnodes/worker",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -13,22 +13,12 @@
     "@ifnodes/database": "*",
     "@ifnodes/node-definitions": "*",
     "@ifnodes/shared": "*",
-    "@nestjs/common": "^11.1.0",
-    "@nestjs/core": "^11.1.0",
-    "@nestjs/platform-express": "^11.1.0",
-    "@nestjs/throttler": "^6.4.0",
+    "@ifnodes/workflow-core": "*",
     "bullmq": "^5.52.0",
-    "cookie-parser": "^1.4.7",
     "dotenv": "^16.5.0",
-    "google-auth-library": "^9.15.0",
-    "helmet": "^8.1.0",
-    "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2",
-    "zod": "^3.25.0"
+    "ioredis": "^5.6.0"
   },
   "devDependencies": {
-    "@types/cookie-parser": "^1.4.8",
-    "@types/express": "^5.0.1",
     "@types/node": "^22.15.0",
     "eslint": "^9.28.0",
     "ts-node": "^10.9.2",

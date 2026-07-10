@@ -14,6 +14,8 @@ import { ProjectsService } from './projects/projects.service';
 import { WorkflowsController } from './workflows/workflows.controller';
 import { WorkflowsService } from './workflows/workflows.service';
 import { NodeTypesController } from './workflows/node-types.controller';
+import { ExecutionsController } from './executions/executions.controller';
+import { ExecutionsService } from './executions/executions.service';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -27,6 +29,7 @@ import { HealthController } from './health/health.controller';
     ProjectsController,
     WorkflowsController,
     NodeTypesController,
+    ExecutionsController,
     HealthController,
   ],
   providers: [
@@ -39,6 +42,7 @@ import { HealthController } from './health/health.controller';
     ClientsService,
     ProjectsService,
     WorkflowsService,
+    ExecutionsService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

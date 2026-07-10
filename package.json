@@ -8,13 +8,14 @@
     "apps/*"
   ],
   "scripts": {
-    "build:packages": "npm run build -w @ifnodes/shared -w @ifnodes/node-definitions -w @ifnodes/database",
-    "build": "npm run build:packages && npm run build -w @ifnodes/api && npm run build -w @ifnodes/web",
+    "build:packages": "npm run build -w @ifnodes/shared -w @ifnodes/expression-engine -w @ifnodes/node-definitions -w @ifnodes/workflow-core -w @ifnodes/database",
+    "build": "npm run build:packages && npm run build -w @ifnodes/api -w @ifnodes/worker && npm run build -w @ifnodes/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "dev:web": "npm run dev -w @ifnodes/web",
     "dev:api": "npm run dev -w @ifnodes/api",
+    "dev:worker": "npm run dev -w @ifnodes/worker",
     "db:up": "docker compose -f docker/docker-compose.yml up -d",
     "db:generate": "npm run generate -w @ifnodes/database",
     "db:migrate": "npm run migrate:dev -w @ifnodes/database",

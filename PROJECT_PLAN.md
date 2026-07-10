@@ -91,10 +91,10 @@ Decisiones de normalización (adaptaciones respecto de la lista mínima del brie
 
 | Fase | Contenido | Estado |
 |---|---|---|
-| 1 | Monorepo, Docker, Prisma, auth, usuarios, clientes, proyectos, layout | ver `PROGRESS.md` |
-| 2 | Constructor React Flow (crear/mover/conectar/guardar/validar) | ver `PROGRESS.md` (base mínima en esta entrega) |
-| 3 | Motor local: workflow-core, contexto, variables, historial de pasos | ⬜ |
-| 4 | Debugging: inspector, logs, reintento, tiempo real | ⬜ |
+| 1 | Monorepo, infraestructura, Prisma, auth, usuarios, clientes, proyectos, layout | ✅ verificada E2E |
+| 2 | Constructor React Flow (crear/conectar/guardar/validar/undo/copy/notas) | ✅ (pendiente: grupos y subflujos) |
+| 3 | Motor: expression-engine, workflow-core, worker BullMQ, ejecuciones | ✅ núcleo verificado E2E (pendiente: nodo Esperar) |
+| 4 | Debugging: inspector, logs, reintento, tiempo real | 🔶 (polling en vivo; falta SSE, ejecutar desde nodo, comparar) |
 | 5 | Simulador (WhatsApp, webhook, escenarios) | ⬜ |
 | 6 | Casos de prueba + assertions | ⬜ |
 | 7 | Integraciones: HTTP, IA, SMTP, WhatsApp Cloud, credenciales, entornos | ⬜ |
@@ -123,3 +123,6 @@ Decisiones de normalización (adaptaciones respecto de la lista mínima del brie
 5. **Dev-login controlado** (ver §6).
 6. **Worker diferido a Fase 3**: en Fase 1–2 no hay ejecuciones; crear el proceso vacío hoy solo agrega ruido. El compose ya reserva Redis.
 7. **Diseño**: estética de herramienta técnica (referencias: IDEs, Postman, observabilidad). Tokens en `apps/web/app/globals.css`; tipografía Geist Sans + Geist Mono; acento azul `#2F81F7`-familia; dark mode de primera clase; densidad de información alta con jerarquía clara; sin tarjetas genéricas.
+8. **Progreso en vivo por polling (700 ms) en lugar de SSE** para la primera versión de "ver los nodos iluminarse": funciona con cualquier infraestructura y sin conexiones persistentes; SSE lo reemplaza al completar la Fase 4 (el motor ya publica los pasos vía hooks).
+9. **Infra local por Homebrew como fallback de Docker**: la máquina de desarrollo no tiene Docker, así que PostgreSQL 16 y Redis 7 corren con `brew services`. `docker/docker-compose.yml` sigue siendo la forma canónica en máquinas con Docker; la app solo ve `DATABASE_URL`/`REDIS_URL`.
+10. **`{{trigger.*}}` expone la salida del nodo disparador** (no el payload crudo): el trigger normaliza la entrada (p.ej. el manual aplica su payload de ejemplo si no recibe datos) y el resto del flujo consume esa forma. Detectado y corregido en la verificación E2E.

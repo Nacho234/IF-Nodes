@@ -1,9 +1,12 @@
 import type {
   ClientStatus,
+  ExecutionStatus,
   Permission,
   ProjectStatus,
   ProjectType,
+  StepStatus,
   UserRole,
+  WorkflowError,
 } from '@ifnodes/shared';
 
 /** Formas de respuesta de la API consumidas por la web. */
@@ -122,4 +125,75 @@ export interface SaveDraftResponse {
   savedAt: string;
   structureIssues: GraphIssueDto[];
   configIssues: NodeConfigIssueDto[];
+}
+
+/* ── Ejecuciones ───────────────────────────────────────────── */
+
+export interface ExecutionRow {
+  id: string;
+  projectId: string;
+  workflowId: string;
+  status: ExecutionStatus;
+  source: string;
+  environment: string;
+  triggerType: string;
+  failedNodeId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  createdAt: string;
+  project: { id: string; name: string; client: { name: string } };
+  workflow: { id: string; name: string };
+  version: { number: number } | null;
+  _count: { steps: number };
+}
+
+export interface ExecutionStepRow {
+  id: string;
+  nodeId: string;
+  nodeType: string;
+  nodeVersion: number;
+  nodeName: string;
+  status: StepStatus;
+  input: unknown;
+  output: unknown;
+  error: WorkflowError | null;
+  attempt: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  order: number;
+}
+
+export interface ExecutionLogRow {
+  id: string;
+  nodeId: string | null;
+  level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+  message: string;
+  data: unknown;
+  createdAt: string;
+}
+
+export interface ExecutionDetail {
+  id: string;
+  projectId: string;
+  workflowId: string;
+  versionId: string | null;
+  status: ExecutionStatus;
+  source: string;
+  environment: string;
+  triggerType: string;
+  triggerData: unknown;
+  context: { nodeOutputs?: Record<string, unknown>; finalOutput?: unknown } | null;
+  error: WorkflowError | null;
+  failedNodeId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  createdAt: string;
+  project: { id: string; name: string };
+  workflow: { id: string; name: string };
+  version: { number: number } | null;
+  steps: ExecutionStepRow[];
+  logs: ExecutionLogRow[];
 }

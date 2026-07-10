@@ -13,22 +13,36 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { workflowGraphSchema, type WorkflowGraph } from '@ifnodes/shared';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { useBuilderStore } from './store';
 import { FlowNode } from './flow-node';
+import { NoteNode } from './note-node';
 import { NodePalette, DND_MIME } from './palette';
 import { ConfigPanel } from './config-panel';
 import { BuilderToolbar } from './toolbar';
-import type { NodeTypeInfo, SaveDraftResponse, WorkflowDetail } from '@/lib/types';
+import type { ExecutionDetail, NodeTypeInfo, SaveDraftResponse, WorkflowDetail } from '@/lib/types';
 
 const AUTOSAVE_DELAY_MS = 1200;
-const nodeTypes = { ifn: FlowNode };
+const RUN_POLL_MS = 700;
+const nodeTypes = { ifn: FlowNode, note: NoteNode };
+
+const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'TIMED_OUT']);
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+  );
+}
 
 function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog: NodeTypeInfo[] }) {
   const store = useBuilderStore();
   const { screenToFlowPosition } = useReactFlow();
   const [validating, setValidating] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedFor = useRef<string | null>(null);
 
   // Cargar el borrador en el store (una sola vez por workflow)
@@ -43,9 +57,16 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflow.id, catalog]);
 
-  const saveNow = useCallback(async () => {
+  useEffect(
+    () => () => {
+      if (pollTimer.current) clearTimeout(pollTimer.current);
+    },
+    [],
+  );
+
+  const saveNow = useCallback(async (): Promise<boolean> => {
     const state = useBuilderStore.getState();
-    if (state.saveState === 'saving') return;
+    if (state.saveState === 'saving') return false;
     state.setSaveState('saving');
     try {
       const response = await api.put<SaveDraftResponse>(`/workflows/${workflow.id}/draft`, {
@@ -53,8 +74,10 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
       });
       useBuilderStore.getState().setIssues(response.structureIssues, response.configIssues);
       useBuilderStore.getState().markSaved(response.savedAt);
+      return true;
     } catch {
       useBuilderStore.getState().setSaveState('error');
+      return false;
     }
   }, [workflow.id]);
 
@@ -69,30 +92,86 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
     };
   }, [revision, saveNow]);
 
-  // Cmd/Ctrl+S: guardar ya
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-        event.preventDefault();
-        void saveNow();
+  const pollExecution = useCallback(async (executionId: string) => {
+    try {
+      const execution = await api.get<ExecutionDetail>(`/executions/${executionId}`);
+      useBuilderStore.getState().setActiveExecution(execution);
+      if (!TERMINAL_STATUSES.has(execution.status)) {
+        pollTimer.current = setTimeout(() => void pollExecution(executionId), RUN_POLL_MS);
+      } else {
+        setRunning(false);
       }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [saveNow]);
+    } catch {
+      setRunning(false);
+    }
+  }, []);
+
+  const runFlow = useCallback(async () => {
+    setRunError(null);
+    setRunning(true);
+    useBuilderStore.getState().setActiveExecution(null);
+    const saved = await saveNow();
+    if (!saved) {
+      setRunning(false);
+      setRunError('No se pudo guardar antes de ejecutar.');
+      return;
+    }
+    try {
+      const { executionId } = await api.post<{ executionId: string }>(`/workflows/${workflow.id}/run`, {});
+      void pollExecution(executionId);
+    } catch (error) {
+      setRunning(false);
+      setRunError(error instanceof ApiError ? error.message : 'No se pudo iniciar la ejecución.');
+    }
+  }, [saveNow, workflow.id, pollExecution]);
 
   const validate = useCallback(async () => {
     setValidating(true);
     try {
       await saveNow();
-      const result = await api.get<{ structureIssues: SaveDraftResponse['structureIssues']; configIssues: SaveDraftResponse['configIssues'] }>(
-        `/workflows/${workflow.id}/validate`,
-      );
+      const result = await api.get<{
+        structureIssues: SaveDraftResponse['structureIssues'];
+        configIssues: SaveDraftResponse['configIssues'];
+      }>(`/workflows/${workflow.id}/validate`);
       useBuilderStore.getState().setIssues(result.structureIssues, result.configIssues);
     } finally {
       setValidating(false);
     }
   }, [saveNow, workflow.id]);
+
+  // Atajos: guardar, deshacer/rehacer, copiar/pegar
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod) return;
+      const key = event.key.toLowerCase();
+      if (key === 's') {
+        event.preventDefault();
+        void saveNow();
+        return;
+      }
+      if (isEditableTarget(event.target)) return;
+      const state = useBuilderStore.getState();
+      if (key === 'z' && event.shiftKey) {
+        event.preventDefault();
+        state.redo();
+      } else if (key === 'z') {
+        event.preventDefault();
+        state.undo();
+      } else if (key === 'c') {
+        state.copySelection();
+      } else if (key === 'v') {
+        state.paste();
+      } else if (key === 'd') {
+        if (state.selectedNodeId) {
+          event.preventDefault();
+          state.duplicateNode(state.selectedNodeId);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [saveNow]);
 
   const onDrop = useCallback(
     (event: DragEvent) => {
@@ -112,9 +191,25 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
     [store],
   );
 
+  const addNoteAtCenter = useCallback(() => {
+    const position = screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    store.addNote(position);
+  }, [screenToFlowPosition, store]);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <BuilderToolbar workflow={workflow} onValidate={() => void validate()} onSaveNow={() => void saveNow()} validating={validating} />
+      <BuilderToolbar
+        workflow={workflow}
+        onValidate={() => void validate()}
+        onSaveNow={() => void saveNow()}
+        onRun={() => void runFlow()}
+        onAddNote={addNoteAtCenter}
+        validating={validating}
+        running={running}
+      />
       <div className="flex min-h-0 flex-1">
         <NodePalette />
         <div className="relative min-w-0 flex-1" role="application" aria-label="Lienzo del flujo">
@@ -148,6 +243,12 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
               maskColor="color-mix(in srgb, var(--canvas-bg) 70%, transparent)"
             />
           </ReactFlow>
+
+          {runError ? (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-md border border-danger/40 bg-danger-soft px-4 py-2 text-[12px] text-danger shadow-lg">
+              {runError}
+            </div>
+          ) : null}
 
           {store.nodes.length === 0 && store.saveState !== 'loading' ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

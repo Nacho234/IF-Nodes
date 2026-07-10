@@ -2,71 +2,71 @@
 
 Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) · 🚧 en curso · ⬜ pendiente.
 
-Última actualización: 2026-07-10 (cierre de Fase 1 + base de Fase 2).
+Última actualización: 2026-07-10 (Fases 1 y 2 completas; núcleo de Fases 3 y 4 operativo y verificado E2E).
 
-## Fase 1 — Fundaciones
+## Fase 1 — Fundaciones ✅
 
-- ✅ Documentación inicial (PROJECT_PLAN, ARCHITECTURE, WORKFLOW_ENGINE, NODE_DEVELOPMENT, EXPORT_RUNTIME, SECURITY, PROGRESS, README)
-- ✅ Monorepo npm workspaces + TypeScript estricto (`strict` + `noUncheckedIndexedAccess`)
-- 🔶 Docker Compose (PostgreSQL 16 + Redis 7 con healthchecks) + `.env.example` — *compose escrito; no ejecutado en esta máquina porque no hay Docker instalado*
-- 🔶 Prisma: schema completo (17 modelos, enums, índices) + seed idempotente — *`prisma generate` OK; migración y seed requieren la DB levantada*
-- ✅ `packages/shared`: marca centralizada, matriz de roles/permisos, esquema Zod del grafo + validación estructural (trigger único, nodos sueltos, ciclos, aristas duplicadas)
-- ✅ `packages/node-definitions`: contrato `NodeDefinition`, registro con versionado, 3 nodos demo (Inicio manual, Transformar datos, Respuesta)
-- 🔶 API NestJS: auth Google OAuth + dev-login controlado + sesiones en DB (SHA-256, cookie HttpOnly, CSRF por header), guards de permisos, clientes, proyectos (crea flujo principal + 3 entornos), workflows (borrador validado + issues), catálogo de nodos, auditoría, health, helmet/CORS/rate-limit — *typecheck/lint/build/boot OK; endpoints con DB quedan verificados al levantar Docker*
-- ✅ Web: login (métodos según API, dev-login señalizado), layout con sidebar colapsable, tema oscuro/claro, middleware de sesión
-- 🔶 Web: Inicio con métricas reales, Clientes (tabla, filtros, alta, edición, archivar), Proyectos (tabla, filtros, alta, detalle con entornos y flujos) — *UI compilada y navegable; flujo completo con datos reales pendiente de DB*
-- ✅ Secciones futuras (Plantillas, Ejecuciones, Credenciales, Integraciones, Exportaciones, Configuración) con estado honesto de fase — sin botones muertos
+- ✅ Documentación (PROJECT_PLAN, ARCHITECTURE, WORKFLOW_ENGINE, NODE_DEVELOPMENT, EXPORT_RUNTIME, SECURITY, README)
+- ✅ Monorepo npm workspaces + TypeScript estricto
+- ✅ Infraestructura local: PostgreSQL 16 + Redis 7 **corriendo** (brew services; `docker/docker-compose.yml` sigue siendo la opción canónica para otras máquinas)
+- ✅ Prisma: schema (17 modelos) + migración `init` aplicada + seed corrido (owner + cliente/proyecto/flujo demo)
+- ✅ `packages/shared`: marca, permisos, grafo Zod + validación estructural, redactor de secretos, contratos de cola
+- ✅ API NestJS: auth (dev-login verificado E2E; Google OAuth listo a falta de credenciales), sesiones DB, guards, clientes, proyectos, workflows, catálogo de nodos, auditoría, health
+- ✅ Web: login, layout (sidebar colapsable, dark/light), Inicio, Clientes, Proyectos — navegable con datos reales
 
-## Fase 2 — Constructor visual (base mínima entregada)
+## Fase 2 — Constructor visual ✅
 
-- ✅ Canvas React Flow: agregar (drag & drop y doble clic), mover, conectar, eliminar nodos/conexiones (Delete/Backspace), zoom, minimapa, fit view
-- ✅ Biblioteca de nodos con buscador y categorías (se alimenta del catálogo de la API)
-- ✅ Panel derecho: renombrar, formulario generado desde `uiHints` (text/textarea/code/switch/keyvalue), notas, activar/desactivar, duplicar, eliminar, puertos y variables disponibles
-- ✅ Guardado: autosave con debounce (1,2 s) + Cmd/Ctrl+S, indicador guardando/guardado/sin guardar/error con reintento
-- ✅ Validación: botón Validar + issues del backend (estructura y config por nodo) listados en la toolbar y marcados en el nodo
-- ⬜ Pendiente para completar Fase 2: deshacer/rehacer, copiar/pegar, selección múltiple con acciones, grupos y notas en el lienzo, subflujos
+- ✅ Canvas React Flow: drag & drop, mover, conectar, eliminar, zoom, minimapa, fit view
+- ✅ Biblioteca de nodos con buscador y categorías
+- ✅ Panel derecho: renombrar, formulario desde `uiHints`, notas, activar/desactivar, duplicar, eliminar, puertos, variables, **entrada/salida de la última ejecución**
+- ✅ Guardado: autosave con debounce + ⌘S + indicador de estado
+- ✅ Validación con issues de estructura y de config por nodo
+- ✅ Deshacer/rehacer (⌘Z / ⇧⌘Z, historial 50 entradas: estructura y movimientos)
+- ✅ Copiar/pegar (⌘C/⌘V con offset) y duplicar (⌘D); selección múltiple nativa (shift)
+- ✅ Notas adhesivas en el lienzo (persisten en `stickyNotes`)
+- ⬜ Grupos de nodos y subflujos → cuando existan múltiples flujos por proyecto (Fase 3+)
 
-## Módulos y archivos principales
+## Fase 3 — Motor ✅ (núcleo)
 
-| Módulo | Ubicación |
-|---|---|
-| Esquema del grafo + validación | `packages/shared/src/workflow-graph.ts` |
-| Permisos | `packages/shared/src/permissions.ts` |
-| Contrato y registro de nodos | `packages/node-definitions/src/{contract,registry}.ts` |
-| Nodos demo | `packages/node-definitions/src/nodes/**` |
-| Prisma schema / seed | `packages/database/prisma/schema.prisma`, `src/seed.ts` |
-| Auth API | `apps/api/src/auth/*` |
-| Clientes / Proyectos / Workflows | `apps/api/src/{clients,projects,workflows}/*` |
-| Design tokens | `apps/web/app/globals.css` |
-| Shell (sidebar, headers) | `apps/web/components/shell/*` |
-| Builder | `apps/web/features/builder/*` |
+- ✅ `packages/expression-engine`: parser propio sin `eval` (paths seguros anti-prototype-pollution, whitelist de 13 funciones, plantillas e interpolación) — 15 tests
+- ✅ `packages/workflow-core`: motor puro (validación, ramas por puertos, contexto serializable, resolución de expresiones, 5 estrategias de error, reintentos con backoff, timeout por nodo y global acotado, cancelación por señal, límite de pasos, hooks por paso) — 19 tests
+- ✅ `apps/worker`: consumidor BullMQ, persiste Execution/ExecutionStep/ExecutionLog con secretos redactados; idempotencia por jobId; logs JSON estructurados
+- ✅ API `executions`: ejecutar borrador (valida antes de encolar), listar con filtros, detalle con pasos y logs, **reintentar**; 503 claro si Redis no está
+- ⬜ Nodo Esperar (delayed jobs) y ejecución desde un nodo → siguiente iteración
 
-## Pruebas realizadas (2026-07-10)
+## Fase 4 — Debugging (parcial)
+
+- ✅ Botón **Ejecutar** en el constructor: nodos se iluminan en vivo (polling 700 ms), estado con icono+texto y duración por nodo
+- ✅ Página global Ejecuciones (filtros por estado, auto-refresh si hay activas)
+- ✅ Detalle de ejecución: recorrido por nodo con entrada/salida/error/intentos/duración, disparador, salida final, logs, reintentar, link al constructor
+- ⬜ SSE en tiempo real (hoy: polling — decisión en PROJECT_PLAN §9.9), comparar ejecuciones, descargar diagnóstico
+
+## Verificaciones (2026-07-10, segunda tanda)
 
 | Verificación | Resultado |
 |---|---|
-| `npm run typecheck` (5 workspaces) | ✅ sin errores |
-| `npm run lint` (5 workspaces) | ✅ 0 errores, 0 warnings |
-| `npm run test` — shared (10 tests: schema + validación estructural) | ✅ 10/10 |
-| `npm run test` — node-definitions (10 tests: registro + executors de los 3 nodos) | ✅ 10/10 |
-| `npm run build` — packages + API + web (13 rutas) | ✅ |
-| Boot API (`node dist/main.js`): `/health/live`, `/auth/methods` | ✅ responde; `/health` reporta `database: down` honestamente (sin Docker) |
-| Boot web (`next start`): redirect a `/login` sin sesión, `/login` 200, rewrite `/api/*` → NestJS | ✅ |
-| Login end-to-end, CRUD con datos, migración y seed | ⏸ requieren `docker compose up` (sin Docker en esta máquina) |
+| `npm run typecheck` (7 workspaces) | ✅ |
+| `npm run lint` (7 workspaces) | ✅ 0 errores, 0 warnings |
+| Tests unitarios: shared 10 · node-definitions 10 · expression-engine 15 · workflow-core 19 | ✅ **54/54** |
+| Builds de producción (packages, api, worker, web) | ✅ |
+| Migración `init` + seed sobre Postgres real | ✅ |
+| E2E por API: dev-login → cookie → listar proyectos → **ejecutar flujo demo** → worker lo procesa → 3 pasos SUCCEEDED con input/output correctos → salida final `{"message":"Hola Hola, quiero un turno"}` | ✅ |
+| E2E: reintentar ejecución → nueva ejecución SUCCEEDED | ✅ |
+| Web en http://localhost:3005 con login funcional | ✅ (puerto 3000 ocupado por otro proceso local) |
 
-## Problemas encontrados
+## Problemas encontrados y resueltos
 
-- **Sin Docker/Postgres/Redis en la máquina de desarrollo** → imposible verificar migraciones, seed y flujo con datos en esta sesión. Mitigación: compose listo con healthchecks, instrucciones en README, todo lo demás verificado.
-- **Puerto 3000 ocupado** por otro proceso local del equipo → el smoke test de la web se hizo en el puerto 3010; en uso normal, liberar el 3000 o pasar `--port`.
-- Tipos: `zodResolver` no acepta schemas con `.default()` (input≠output) → se quitó el default de `status` (el form siempre lo envía). `ZodType<TConfig>` del contrato de nodos pasó a `ZodType<TConfig, ZodTypeDef, unknown>`.
-- ESLint `consistent-type-imports` desactivada solo en la API: convertir servicios inyectados a `import type` rompe la DI de Nest (documentado en `apps/api/eslint.config.mjs`).
+- **Bug real detectado en E2E**: el trigger manual devolvía el input vacío `{}` en lugar del payload de ejemplo, y `{{trigger.*}}` apuntaba al dato crudo en vez de a la salida del trigger. Corregidos ambos (nodo y motor) y re-verificado E2E.
+- Timeout global del motor: no interrumpía un nodo en curso; ahora el timeout de cada nodo se acota al presupuesto global restante (test lo cubre).
+- Tipos BullMQ/ioredis: se pasa configuración plana (`redisConnectionFromUrl`) en vez de instancias, evitando choques de versión.
+- Sin Docker en la máquina: se instaló PostgreSQL 16 + Redis 7 vía Homebrew (`brew services`); el compose queda para entornos con Docker.
 
 ## Decisiones pendientes
 
-- Crear credenciales OAuth en Google Cloud y cargar `AUTHORIZED_EMAILS` del equipo.
-- Instalar Docker Desktop y correr la verificación E2E de Fase 1 (migrar, seed, login dev, CRUD, guardar flujo).
-- Nombrar la primera migración de Prisma (`npm run db:migrate`).
+- Credenciales Google OAuth reales + `AUTHORIZED_EMAILS` del equipo.
+- SSE para reemplazar el polling del builder (Fase 4).
+- Nombrar y ejecutar los próximos nodos del MVP (webhook, condición, switch, set variable, esperar) — Fase 4 de nodos.
 
 ## Próxima fase
 
-**Completar Fase 2** (undo/redo, copiar/pegar, multi-selección, notas y grupos) y arrancar **Fase 3** (motor local: `workflow-core` puro + worker BullMQ + ejecuciones con historial de pasos), según PROJECT_PLAN.md.
+**Fase 5 (Simulador de WhatsApp/webhook)** y completar Fase 4 (SSE, ejecución desde nodo, comparar ejecuciones), luego casos de prueba (Fase 6).
