@@ -1,0 +1,444 @@
+// IF Nodes — esquema del builder interno.
+// Decisiones de normalización documentadas en PROJECT_PLAN.md §5
+// (grafo como JSON validado por Zod; assertions embebidas en TestCase;
+// tipos de nodo como registro en código).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Usuarios y sesiones ─────────────────────────────────────────
+
+enum UserRole {
+  OWNER
+  DEVELOPER
+  TESTER
+  VIEWER
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  avatarUrl String?
+  role      UserRole @default(DEVELOPER)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions       Session[]
+  clientsCreated Client[]    @relation("ClientCreatedBy")
+  projectsOwned  Project[]   @relation("ProjectOwner")
+  auditLogs      AuditLog[]
+  credentials    Credential[]
+  exports        Export[]
+  versions       WorkflowVersion[]
+
+  @@index([email])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  /// SHA-256 del token opaco; el token en claro solo vive en la cookie
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ── Clientes ────────────────────────────────────────────────────
+
+enum ClientStatus {
+  PROSPECT
+  IN_DEVELOPMENT
+  ACTIVE
+  PAUSED
+  FINISHED
+  ARCHIVED
+}
+
+model Client {
+  id            String       @id @default(cuid())
+  name          String
+  legalName     String?
+  logoUrl       String?
+  industry      String?
+  contactName   String?
+  contactEmail  String?
+  contactPhone  String?
+  status        ClientStatus @default(PROSPECT)
+  internalNotes String?      @db.Text
+  createdById   String?
+  createdBy     User?        @relation("ClientCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  projects Project[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ── Proyectos ───────────────────────────────────────────────────
+
+enum ProjectType {
+  WHATSAPP_BOT
+  WEBCHAT_BOT
+  WEBHOOK_AUTOMATION
+  SCHEDULED_AUTOMATION
+  SYSTEM_INTEGRATION
+  AI_AGENT
+  INTERNAL_AUTOMATION
+  CUSTOM
+}
+
+enum ProjectStatus {
+  DRAFT
+  IN_DEVELOPMENT
+  IN_TESTING
+  READY_FOR_PRODUCTION
+  EXPORTED
+  IN_PRODUCTION
+  PAUSED
+  ARCHIVED
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  clientId    String
+  client      Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  name        String
+  description String?       @db.Text
+  type        ProjectType
+  status      ProjectStatus @default(DRAFT)
+  /// Versión estable activa (si existe)
+  activeVersionId String?
+  ownerId     String?
+  owner       User?         @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  /// Configuración de exportación (persistencia, proveedor, etc. — Fase 9)
+  exportConfig Json?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workflows    Workflow[]
+  executions   Execution[]
+  testCases    TestCase[]
+  environments Environment[]
+  credentials  Credential[]
+  exports      Export[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([type])
+  @@index([updatedAt])
+}
+
+// ── Flujos y versiones ──────────────────────────────────────────
+
+model Workflow {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  /// true para el flujo principal del proyecto
+  isMain      Boolean  @default(false)
+  /// Borrador vivo: grafo validado por workflowGraphSchema (Zod) al guardar
+  draftGraph  Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  versions   WorkflowVersion[]
+  executions Execution[]
+
+  @@index([projectId])
+  @@index([projectId, isMain])
+}
+
+model WorkflowVersion {
+  id          String   @id @default(cuid())
+  workflowId  String
+  workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  /// Número incremental por workflow
+  number      Int
+  /// Snapshot INMUTABLE del grafo (no hay update de este campo)
+  graph       Json
+  /// Ids de subflujos referenciados al momento de versionar
+  subflowIds  String[] @default([])
+  description String?
+  isStable    Boolean  @default(false)
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  executions Execution[]
+  exports    Export[]
+
+  @@unique([workflowId, number])
+  @@index([workflowId])
+  @@index([isStable])
+}
+
+// ── Ejecuciones ─────────────────────────────────────────────────
+
+enum ExecutionStatus {
+  QUEUED
+  RUNNING
+  WAITING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  TIMED_OUT
+}
+
+enum StepStatus {
+  PENDING
+  RUNNING
+  WAITING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+  CANCELLED
+}
+
+enum ExecutionSource {
+  MANUAL
+  SIMULATOR
+  TEST_CASE
+  WEBHOOK
+  SCHEDULE
+}
+
+model Execution {
+  id          String          @id @default(cuid())
+  projectId   String
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowId  String
+  workflow    Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  /// null cuando se ejecuta el borrador desde el builder
+  versionId   String?
+  version     WorkflowVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  status      ExecutionStatus @default(QUEUED)
+  source      ExecutionSource
+  environment String          @default("DEVELOPMENT")
+  triggerType String
+  triggerData Json?
+  /// Contexto final serializado (redactado)
+  context     Json?
+  error       Json?
+  failedNodeId String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  durationMs  Int?
+  createdAt   DateTime        @default(now())
+
+  steps ExecutionStep[]
+  logs  ExecutionLog[]
+
+  @@index([projectId, createdAt])
+  @@index([workflowId, createdAt])
+  @@index([status])
+  @@index([versionId])
+}
+
+model ExecutionStep {
+  id          String     @id @default(cuid())
+  executionId String
+  execution   Execution  @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  nodeId      String
+  nodeType    String
+  nodeVersion Int
+  nodeName    String
+  status      StepStatus @default(PENDING)
+  /// Entrada/salida redactadas (sin secretos)
+  input       Json?
+  output      Json?
+  error       Json?
+  attempt     Int        @default(1)
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  durationMs  Int?
+  order       Int
+
+  @@index([executionId, order])
+  @@index([executionId, nodeId])
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
+model ExecutionLog {
+  id          String    @id @default(cuid())
+  executionId String
+  execution   Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  nodeId      String?
+  level       LogLevel
+  message     String
+  data        Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([executionId, createdAt])
+}
+
+// ── Casos de prueba ─────────────────────────────────────────────
+
+model TestCase {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowId  String?
+  name        String
+  description String?
+  triggerType String
+  input       Json
+  variables   Json?
+  /// Assertions tipadas (schema Zod en packages/shared — Fase 6)
+  assertions  Json     @default("[]")
+  expectedFinalNodeId String?
+  expectedStatus      String?
+  lastRunAt     DateTime?
+  lastRunStatus String?
+  lastRunDetail Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([workflowId])
+}
+
+// ── Entornos y variables ────────────────────────────────────────
+
+enum EnvironmentKind {
+  DEVELOPMENT
+  TESTING
+  PRODUCTION
+}
+
+model Environment {
+  id        String          @id @default(cuid())
+  projectId String
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind      EnvironmentKind
+  createdAt DateTime        @default(now())
+
+  variables EnvironmentVariable[]
+
+  @@unique([projectId, kind])
+}
+
+model EnvironmentVariable {
+  id            String      @id @default(cuid())
+  environmentId String
+  environment   Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  key           String
+  /// Valor plano solo si secret=false; si secret=true va cifrado en encryptedValue
+  value         String?
+  secret        Boolean     @default(false)
+  /// AES-256-GCM (iv:tag:cipher, hex) con CREDENTIALS_ENCRYPTION_KEY
+  encryptedValue String?
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([environmentId, key])
+}
+
+// ── Credenciales e integraciones ────────────────────────────────
+
+model Integration {
+  id          String  @id @default(cuid())
+  /// Identificador del proveedor: "whatsapp-cloud", "openai", "smtp"…
+  slug        String  @unique
+  name        String
+  description String?
+  enabled     Boolean @default(true)
+
+  credentials Credential[]
+}
+
+model Credential {
+  id             String       @id @default(cuid())
+  name           String
+  integrationId  String
+  integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  projectId      String?
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  environment    EnvironmentKind @default(DEVELOPMENT)
+  /// Secreto AES-256-GCM; NUNCA se devuelve al frontend
+  encryptedData  String
+  /// Metadata no sensible para mostrar (p.ej. últimos 4 caracteres)
+  maskedHint     String?
+  active         Boolean      @default(true)
+  lastVerifiedAt DateTime?
+  createdById    String?
+  createdBy      User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([projectId])
+  @@index([integrationId])
+}
+
+// ── Exportaciones ───────────────────────────────────────────────
+
+enum ExportStatus {
+  PENDING
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+model Export {
+  id          String       @id @default(cuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versionId   String
+  version     WorkflowVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  status      ExportStatus @default(PENDING)
+  /// "zip" | "folder"
+  format      String
+  /// Manifest generado (sin secretos)
+  manifest    Json?
+  outputPath  String?
+  sizeBytes   Int?
+  error       String?
+  createdById String?
+  createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+
+  @@index([projectId, createdAt])
+}
+
+// ── Auditoría ───────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  /// Cambios relevantes SIN secretos
+  detail     Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([userId])
+}

@@ -1,0 +1,224 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─────────────────────────────────────────────────────────────
+   IF Nodes — tokens de diseño
+   Estética: herramienta técnica profesional (IDE / observabilidad).
+   Dark mode de primera clase; light mode igual de cuidado.
+   Cambiar la marca = tocar --brand-* y packages/shared/src/brand.ts
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  /* Marca */
+  --brand-accent: #2563eb;
+  --brand-accent-strong: #1d4ed8;
+
+  /* Superficies (light) */
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eef0f4;
+  --border: #e2e6ec;
+  --border-strong: #cdd3dd;
+
+  /* Texto */
+  --foreground: #14181f;
+  --muted-foreground: #5c6572;
+  --faint-foreground: #8d95a3;
+
+  /* Acento y estados */
+  --accent: var(--brand-accent);
+  --accent-foreground: #ffffff;
+  --accent-soft: #e8effd;
+  --success: #147a53;
+  --success-soft: #e2f4ec;
+  --warning: #935f10;
+  --warning-soft: #fbf0da;
+  --danger: #c93a35;
+  --danger-soft: #fdeae9;
+  --ring: var(--brand-accent);
+
+  /* Editor de nodos */
+  --canvas-bg: #eef0f4;
+  --canvas-dots: #c9cfd9;
+  --node-bg: #ffffff;
+  --node-border: #d8dde5;
+  --node-border-selected: var(--brand-accent);
+  --edge-stroke: #9aa4b2;
+
+  --radius: 0.5rem;
+}
+
+.dark {
+  --brand-accent: #4d8dff;
+  --brand-accent-strong: #6da3ff;
+
+  --background: #0a0c10;
+  --surface: #0f1319;
+  --surface-raised: #141a23;
+  --surface-sunken: #07090c;
+  --border: #1e2530;
+  --border-strong: #2c3542;
+
+  --foreground: #e7ebf2;
+  --muted-foreground: #99a3b3;
+  --faint-foreground: #667080;
+
+  --accent: var(--brand-accent);
+  --accent-foreground: #0a0c10;
+  --accent-soft: #14233d;
+  --success: #45c48f;
+  --success-soft: #10281e;
+  --warning: #e0a94e;
+  --warning-soft: #2b2212;
+  --danger: #f0605a;
+  --danger-soft: #331413;
+  --ring: var(--brand-accent);
+
+  --canvas-bg: #0a0c10;
+  --canvas-dots: #222a36;
+  --node-bg: #12171f;
+  --node-border: #262e3b;
+  --node-border-selected: var(--brand-accent);
+  --edge-stroke: #4a5568;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-faint-foreground: var(--faint-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', monospace;
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-feature-settings: 'ss01', 'cv05';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars discretos, coherentes con la estética de IDE */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Focus visible consistente (accesibilidad por teclado) */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── React Flow: adaptación al tema ─────────────────────────── */
+.react-flow {
+  background: var(--canvas-bg);
+}
+.react-flow__edge-path {
+  stroke: var(--edge-stroke);
+  stroke-width: 1.5;
+}
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.react-flow__connection-path {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+.react-flow__handle {
+  width: 10px;
+  height: 10px;
+  background: var(--surface-raised);
+  border: 2px solid var(--edge-stroke);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.react-flow__handle:hover,
+.react-flow__handle.connectionindicator:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.react-flow__controls {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.18);
+  overflow: hidden;
+}
+.react-flow__controls-button {
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  width: 28px;
+  height: 28px;
+}
+.react-flow__controls-button:hover {
+  background: var(--surface-sunken);
+  color: var(--foreground);
+}
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+.react-flow__minimap {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.react-flow__attribution {
+  background: transparent;
+  color: var(--faint-foreground);
+}

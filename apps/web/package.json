@@ -1,0 +1,49 @@
+{
+  "name": "@ifnodes/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.0.1",
+    "@ifnodes/node-definitions": "*",
+    "@ifnodes/shared": "*",
+    "@radix-ui/react-dialog": "^1.1.13",
+    "@radix-ui/react-dropdown-menu": "^2.1.14",
+    "@radix-ui/react-label": "^2.1.6",
+    "@radix-ui/react-select": "^2.2.4",
+    "@radix-ui/react-switch": "^1.2.4",
+    "@radix-ui/react-tabs": "^1.1.11",
+    "@radix-ui/react-tooltip": "^1.2.6",
+    "@tanstack/react-query": "^5.76.0",
+    "@xyflow/react": "^12.6.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.510.0",
+    "next": "^15.3.2",
+    "next-themes": "^0.4.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.56.0",
+    "tailwind-merge": "^3.3.0",
+    "zod": "^3.25.0",
+    "zustand": "^5.0.4"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@tailwindcss/postcss": "^4.1.7",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "eslint": "^9.28.0",
+    "eslint-config-next": "^15.3.2",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.7",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@ifnodes/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "dev": "ts-node --transpile-only src/main.ts",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@ifnodes/database": "*",
+    "@ifnodes/node-definitions": "*",
+    "@ifnodes/shared": "*",
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/platform-express": "^11.1.0",
+    "@nestjs/throttler": "^6.4.0",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.5.0",
+    "google-auth-library": "^9.15.0",
+    "helmet": "^8.1.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.8",
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.15.0",
+    "eslint": "^9.28.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.33.0"
+  }
+}

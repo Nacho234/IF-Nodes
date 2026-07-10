@@ -1,0 +1,31 @@
+{
+  "name": "if-nodes",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Builder interno de bots y automatizaciones con constructor visual de nodos y runtime exportable",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:packages": "npm run build -w @ifnodes/shared -w @ifnodes/node-definitions -w @ifnodes/database",
+    "build": "npm run build:packages && npm run build -w @ifnodes/api && npm run build -w @ifnodes/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:web": "npm run dev -w @ifnodes/web",
+    "dev:api": "npm run dev -w @ifnodes/api",
+    "db:up": "docker compose -f docker/docker-compose.yml up -d",
+    "db:generate": "npm run generate -w @ifnodes/database",
+    "db:migrate": "npm run migrate:dev -w @ifnodes/database",
+    "db:seed": "npm run seed -w @ifnodes/database",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,css}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
