@@ -7,6 +7,7 @@ import {
   Check,
   CircleAlert,
   ExternalLink,
+  FlaskConical,
   Loader2,
   MessageCircle,
   Play,
@@ -45,6 +46,7 @@ export function BuilderToolbar({
   onRun,
   onAddNote,
   onToggleSimulator,
+  onSaveTestCase,
   simulatorOpen,
   validating,
   running,
@@ -55,6 +57,7 @@ export function BuilderToolbar({
   onRun: () => void;
   onAddNote: () => void;
   onToggleSimulator: () => void;
+  onSaveTestCase: () => void;
   simulatorOpen: boolean;
   validating: boolean;
   running: boolean;
@@ -211,6 +214,14 @@ export function BuilderToolbar({
               </ul>
             </DropdownMenuContent>
           </DropdownMenu>
+        ) : null}
+
+        {activeExecution && ['SUCCEEDED', 'FAILED'].includes(activeExecution.status) ? (
+          <Tooltip content="Guardar la entrada de la última ejecución como caso de prueba">
+            <Button variant="secondary" size="sm" onClick={onSaveTestCase}>
+              <FlaskConical /> Guardar caso
+            </Button>
+          </Tooltip>
         ) : null}
 
         <Button variant="secondary" size="sm" onClick={onValidate} loading={validating}>

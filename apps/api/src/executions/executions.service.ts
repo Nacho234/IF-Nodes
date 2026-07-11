@@ -42,7 +42,12 @@ export class ExecutionsService implements OnModuleDestroy {
   }
 
   /** Prueba manual del borrador: valida, crea la ejecución y la encola. */
-  async runDraft(workflowId: string, input: Record<string, unknown> | undefined, user: User) {
+  async runDraft(
+    workflowId: string,
+    input: Record<string, unknown> | undefined,
+    user: User,
+    source: 'MANUAL' | 'SIMULATOR' | 'TEST_CASE' = 'MANUAL',
+  ) {
     const workflow = await this.prisma.client.workflow.findUnique({
       where: { id: workflowId },
       select: { id: true, projectId: true, draftGraph: true },
@@ -67,7 +72,7 @@ export class ExecutionsService implements OnModuleDestroy {
         workflowId: workflow.id,
         versionId: null, // prueba del borrador
         status: 'QUEUED',
-        source: 'MANUAL',
+        source,
         environment: 'DEVELOPMENT',
         triggerType: trigger?.type ?? 'trigger.manual',
         triggerData: (input ? redactSecrets(input) : undefined) as Prisma.InputJsonValue | undefined,
@@ -80,7 +85,7 @@ export class ExecutionsService implements OnModuleDestroy {
       action: 'execution.started',
       entityType: 'execution',
       entityId: execution.id,
-      detail: { workflowId, source: 'MANUAL' },
+      detail: { workflowId, source },
     });
     return { executionId: execution.id };
   }

@@ -128,6 +128,40 @@ export interface SaveDraftResponse {
   configIssues: NodeConfigIssueDto[];
 }
 
+/* ── Casos de prueba ───────────────────────────────────────── */
+
+export interface AssertionResultDto {
+  assertion: { id: string; kind: string; path: string; expected: string; nodeId: string };
+  passed: boolean;
+  actual: unknown;
+  message: string;
+}
+
+export interface TestCaseRow {
+  id: string;
+  projectId: string;
+  workflowId: string | null;
+  name: string;
+  description: string | null;
+  input: Record<string, unknown>;
+  assertions: { id: string; kind: string; path: string; expected: string; nodeId: string }[];
+  lastRunAt: string | null;
+  lastRunStatus: string | null;
+  lastRunDetail: {
+    executionId?: string;
+    executionStatus?: string;
+    results?: AssertionResultDto[];
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EvaluateResponse {
+  passed: boolean;
+  executionStatus: string;
+  results: AssertionResultDto[];
+}
+
 /* ── Ejecuciones ───────────────────────────────────────────── */
 
 export interface ExecutionRow {

@@ -2,7 +2,7 @@
 
 Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) · 🚧 en curso · ⬜ pendiente.
 
-Última actualización: 2026-07-10 (tercera tanda: nodos de lógica, triggers webhook/WhatsApp, simulador de conversación y webhook público — todo verificado E2E).
+Última actualización: 2026-07-11 (cuarta tanda: **Fase 6 — casos de prueba** con assertions, verificado E2E).
 
 ## Fase 1 — Fundaciones ✅
 
@@ -50,6 +50,15 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 - ✅ Widget `select` en el panel de configuración (faltaba)
 - ✅ Flujo demo del seed actualizado al del brief: WhatsApp → variable → ¿pide turno? → rama turnos / rama general (con nota adhesiva)
 
+## Fase 6 — Casos de prueba ✅ (núcleo)
+
+- ✅ Assertions tipadas (schema Zod + evaluador puro en `shared`, 9 tests): igual a, contiene, existe, no existe, tipo, mayor/menor, nodo visitado/no visitado, estado final — con paths sobre `output.*`, `nodes.<id>.output.*`, `variables.*`, `trigger.*` (anti prototype-pollution)
+- ✅ API: CRUD de casos + duplicar + `run` (ejecución `source=TEST_CASE`) + `evaluate` (persiste PASSED/FAILED con detalle por assertion)
+- ✅ UI: página Casos de prueba por proyecto (ejecutar uno / **ejecutar todos** en secuencia, resultado por assertion con mensaje de diff, link a la ejecución, editar/duplicar/eliminar)
+- ✅ Builder: botón "Guardar caso" tras una ejecución (prellenado con la entrada real)
+- ✅ Página del proyecto: accesos reales a Casos de prueba y Ejecuciones (dejaron de ser "planificadas")
+- ⬜ Guardar ejecución del simulador como caso con un clic; assertions sugeridas automáticamente
+
 ## Fase 4 — Debugging (parcial)
 
 - ✅ Botón **Ejecutar** en el constructor: nodos se iluminan en vivo (polling 700 ms), estado con icono+texto y duración por nodo
@@ -63,7 +72,8 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 |---|---|
 | `npm run typecheck` (7 workspaces) | ✅ |
 | `npm run lint` (7 workspaces) | ✅ 0 errores, 0 warnings |
-| Tests unitarios: shared 10 · node-definitions 22 · expression-engine 15 · workflow-core 20 | ✅ **67/67** |
+| Tests unitarios: shared 19 · node-definitions 22 · expression-engine 15 · workflow-core 20 | ✅ **76/76** |
+| E2E casos de prueba: caso "turno" con 5 assertions → PASSED persistido; caso mal planteado → FAILED con diagnóstico del recorrido real; corregido → PASSED | ✅ |
 | E2E rama "turno": WhatsApp sim → variable → condición true → respuesta personalizada con `{{trigger.name}}` y `{{variables.empresa}}` | ✅ |
 | E2E rama "general": condición false → respuesta general | ✅ |
 | E2E webhook público: `POST /hooks/:token` → 202 → worker → SUCCEEDED; token inválido → 404 | ✅ |

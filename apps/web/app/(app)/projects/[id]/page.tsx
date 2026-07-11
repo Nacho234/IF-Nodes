@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowRight, GitBranch, Workflow } from 'lucide-react';
+import { ArrowRight, FlaskConical, GitBranch, ListChecks, Workflow } from 'lucide-react';
 import { PROJECT_TYPE_LABELS } from '@ifnodes/shared';
 import { PageHeader } from '@/components/shell/page-header';
 import { ProjectStatusBadge } from '@/components/status-badges';
@@ -14,9 +14,6 @@ import type { ProjectDetail } from '@/lib/types';
  * "planificadas" (texto informativo, sin botones muertos).
  */
 const UPCOMING_SECTIONS = [
-  { name: 'Simulador', phase: 'Fase 5' },
-  { name: 'Ejecuciones', phase: 'Fases 3–4' },
-  { name: 'Casos de prueba', phase: 'Fase 6' },
   { name: 'Variables y credenciales', phase: 'Fase 7' },
   { name: 'Versiones', phase: 'Fase 8' },
   { name: 'Exportar', phase: 'Fase 9' },
@@ -105,6 +102,40 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           <p className="mt-2 text-[11px] text-faint-foreground">
             Los flujos adicionales y subflujos se habilitan al completar la Fase 2.
           </p>
+        </section>
+
+        {/* Accesos del proyecto */}
+        <section className="grid gap-2 sm:grid-cols-2">
+          <Link
+            href={`/projects/${project.id}/tests`}
+            className="flex items-center justify-between rounded-lg border border-border bg-surface px-5 py-4 transition-colors hover:bg-surface-sunken/60"
+          >
+            <span className="flex items-center gap-3">
+              <FlaskConical className="size-4 text-muted-foreground" />
+              <span>
+                <span className="block text-sm font-medium">Casos de prueba</span>
+                <span className="block text-xs text-faint-foreground">
+                  {project._count.testCases} guardados
+                </span>
+              </span>
+            </span>
+            <ArrowRight className="size-4 text-faint-foreground" />
+          </Link>
+          <Link
+            href="/executions"
+            className="flex items-center justify-between rounded-lg border border-border bg-surface px-5 py-4 transition-colors hover:bg-surface-sunken/60"
+          >
+            <span className="flex items-center gap-3">
+              <ListChecks className="size-4 text-muted-foreground" />
+              <span>
+                <span className="block text-sm font-medium">Ejecuciones</span>
+                <span className="block text-xs text-faint-foreground">
+                  {project._count.executions} registradas
+                </span>
+              </span>
+            </span>
+            <ArrowRight className="size-4 text-faint-foreground" />
+          </Link>
         </section>
 
         {/* Entornos */}

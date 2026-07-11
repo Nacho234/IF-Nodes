@@ -21,6 +21,7 @@ import { NodePalette, DND_MIME } from './palette';
 import { ConfigPanel } from './config-panel';
 import { SimulatorPanel } from './simulator-panel';
 import { BuilderToolbar } from './toolbar';
+import { TestCaseDialog } from '@/features/tests/test-case-dialog';
 import type { ExecutionDetail, NodeTypeInfo, SaveDraftResponse, WorkflowDetail } from '@/lib/types';
 
 const AUTOSAVE_DELAY_MS = 1200;
@@ -43,6 +44,7 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [simulatorOpen, setSimulatorOpen] = useState(false);
+  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedFor = useRef<string | null>(null);
@@ -217,6 +219,7 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
         onRun={() => void runFlow()}
         onAddNote={addNoteAtCenter}
         onToggleSimulator={() => setSimulatorOpen((open) => !open)}
+        onSaveTestCase={() => setTestCaseDialogOpen(true)}
         simulatorOpen={simulatorOpen}
         validating={validating}
         running={running}
@@ -276,6 +279,17 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
           <ConfigPanel webhookToken={workflow.webhookToken} />
         )}
       </div>
+
+      <TestCaseDialog
+        open={testCaseDialogOpen}
+        onOpenChange={setTestCaseDialogOpen}
+        projectId={workflow.projectId}
+        workflowId={workflow.id}
+        prefillInput={
+          (useBuilderStore.getState().activeExecution?.triggerData as Record<string, unknown> | null) ??
+          undefined
+        }
+      />
     </div>
   );
 }
