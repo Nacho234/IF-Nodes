@@ -1,0 +1,24 @@
+{
+  "name": "@ifnodes/runtime-template",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@ifnodes/expression-engine": "*",
+    "@ifnodes/node-definitions": "*",
+    "@ifnodes/shared": "*",
+    "@ifnodes/workflow-core": "*",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "eslint": "^9.28.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.33.0"
+  }
+}

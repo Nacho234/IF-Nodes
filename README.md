@@ -77,4 +77,15 @@ Entrar a http://localhost:3000 → **Ingreso de desarrollo** con tu email autori
 
 ## Estado actual
 
-Fases 1 y 2 completas y el núcleo de las Fases 3–4 operativo: constructor con autosave/undo/copy-paste/notas, motor de ejecución testeado (54 tests unitarios), worker BullMQ, ejecuciones con historial por paso y debugging en vivo desde el constructor. Simulador, casos de prueba, integraciones, versionado y exportador siguen el orden de fases de [PROJECT_PLAN.md](PROJECT_PLAN.md). Verificaciones al día en [PROGRESS.md](PROGRESS.md).
+Recorrido completo del MVP operativo y verificado E2E: crear cliente/proyecto/flujo → construir con nodos (lógica, IA, HTTP, WhatsApp) → simular conversación → depurar ejecuciones paso a paso → casos de prueba con assertions → credenciales cifradas → versiones inmutables → **exportar un runtime independiente y desplegable**. El proyecto exportado corre standalone (`node dist/main.js`, sin el monorepo) y responde en sus endpoints. 87 tests unitarios + verificaciones E2E al día en [PROGRESS.md](PROGRESS.md).
+
+Pendiente (Fase 10): variables por entorno (UI), nodos de envío real WhatsApp/SMTP, SSE en vivo, tests E2E con Playwright, accesibilidad.
+
+### Ejecutar un bot exportado
+
+```bash
+# dentro del proyecto exportado (o el ZIP descargado)
+cp .env.example .env      # completar las variables listadas
+node dist/main.js         # levanta en :PORT (o 3000), sin npm install
+curl -X POST localhost:3000/run -H 'content-type: application/json' -d '{"text":"hola"}'
+```

@@ -129,6 +129,35 @@ export interface SaveDraftResponse {
   configIssues: NodeConfigIssueDto[];
 }
 
+/* ── Exportaciones ─────────────────────────────────────────── */
+
+export interface ExportResult {
+  id: string;
+  slug: string;
+  folder: string;
+  zipPath: string;
+  sizeBytes: number;
+  manifest: {
+    project: string;
+    workflowVersion: string;
+    entrypoints: string[];
+    requiredEnvironmentVariables: string[];
+    healthEndpoint: string;
+  };
+  requiredEnvVars: { name: string; hint: string }[];
+}
+
+export interface ExportRow {
+  id: string;
+  status: string;
+  format: string;
+  sizeBytes: number | null;
+  createdAt: string;
+  version: { number: number } | null;
+  project: { id: string; name: string; client: { name: string } };
+  createdBy: { name: string } | null;
+}
+
 /* ── Versiones ─────────────────────────────────────────────── */
 
 export interface VersionRow {

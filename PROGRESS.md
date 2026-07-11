@@ -2,7 +2,7 @@
 
 Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) · 🚧 en curso · ⬜ pendiente.
 
-Última actualización: 2026-07-11 (sexta tanda: **Fase 8 — versionado** inmutable. Verificado E2E).
+Última actualización: 2026-07-11 (séptima tanda: **Fase 9 — exportador de runtime**. Verificado E2E — corre standalone).
 
 ## Fase 1 — Fundaciones ✅
 
@@ -50,6 +50,16 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 - ✅ Widget `select` en el panel de configuración (faltaba)
 - ✅ Flujo demo del seed actualizado al del brief: WhatsApp → variable → ¿pide turno? → rama turnos / rama general (con nota adhesiva)
 
+## Fase 9 — Exportador de runtime ✅ (la funcionalidad central)
+
+- ✅ `packages/runtime-template`: runtime **genérico** que interpreta `workflow.json` con el mismo motor del builder; servidor HTTP nativo (sin framework); servicios sin DB (IA con proveedores, HTTP con SSRF, credenciales desde env)
+- ✅ Exportador (`apps/api/src/exports/`): empaqueta el runtime con **esbuild** en un `dist/main.js` autocontenido (~130 KB, 0 referencias a `@ifnodes/*`); genera `workflow/{workflow,manifest,credentials}.json`, Dockerfile, railway.json, package.json, .env.example, README, .gitignore; ZIP descargable
+- ✅ **Secretos fuera del export**: credenciales referidas → mapeo a env vars (`OPENAI_API_KEY`…); `manifest.requiredEnvironmentVariables` y `.env.example` derivados; el secreto en claro no aparece en ningún archivo
+- ✅ Exporta la versión estable (o la última publicada); nodos no exportables bloquean con error
+- ✅ UI: diálogo Exportar en el constructor (genera, descarga ZIP, muestra env vars y comandos) + página `/exports` global con descarga
+- ✅ Endpoints del runtime: `/health`, `/health/live`, `/health/ready`, `POST /run`, `POST /webhooks/*`, verificación `GET /webhooks/whatsapp`
+- ⬜ Persistencia opcional (Prisma en el runtime) para flujos con DB; deploy automático vía API de Railway (interfaz `DeploymentProvider` documentada)
+
 ## Fase 8 — Versionado ✅
 
 - ✅ Publicar versión **inmutable** desde el borrador (valida antes; snapshot del grafo; sin endpoint que modifique una versión existente)
@@ -93,6 +103,9 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 | `npm run lint` (7 workspaces) | ✅ 0 errores, 0 warnings |
 | Tests unitarios: shared 30 · node-definitions 22 · expression-engine 15 · workflow-core 20 | ✅ **87/87** |
 | E2E versionado: publicar v1 estable → modificar borrador → publicar v2 → comparar (detecta config cambiada) → marcar v2 estable (v1 deja de serlo, activeVersion=v2) → restaurar v1 (borrador vuelve al original) | ✅ |
+| **E2E exportador**: publicar estable → exportar → ZIP 38 KB → copiar fuera del repo → `node dist/main.js` (sin node_modules) arranca, `/health` ok, `POST /run` responde ambas ramas correctamente; `GET /webhooks/whatsapp` verifica token (403 si es incorrecto) | ✅ |
+| E2E export con credencial: OpenAI referida → `credentials.json` mapea apiKey→`OPENAI_API_KEY`, `.env.example` la lista, el secreto `sk-…` NO aparece en ningún archivo | ✅ |
+| Descarga: `GET /exports/:id/download` sirve el ZIP (application/zip, estructura completa) | ✅ |
 | E2E casos de prueba: caso "turno" con 5 assertions → PASSED persistido; caso mal planteado → FAILED con diagnóstico del recorrido real; corregido → PASSED | ✅ |
 | E2E IA (dev-echo): clasificar → "turno", generar → respuesta marcada como desarrollo, encadenado a Respuesta; UsageRecord creado | ✅ |
 | E2E SSRF: metadata/loopback/localhost bloqueados con mensaje claro; api.github.com → 200 | ✅ |

@@ -23,6 +23,7 @@ import { SimulatorPanel } from './simulator-panel';
 import { BuilderToolbar } from './toolbar';
 import { TestCaseDialog } from '@/features/tests/test-case-dialog';
 import { VersionsDialog } from './versions-dialog';
+import { ExportDialog } from './export-dialog';
 import type { ExecutionDetail, NodeTypeInfo, SaveDraftResponse, WorkflowDetail } from '@/lib/types';
 
 const AUTOSAVE_DELAY_MS = 1200;
@@ -47,6 +48,7 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedFor = useRef<string | null>(null);
@@ -230,6 +232,7 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
         onToggleSimulator={() => setSimulatorOpen((open) => !open)}
         onSaveTestCase={() => setTestCaseDialogOpen(true)}
         onOpenVersions={() => setVersionsOpen(true)}
+        onOpenExport={() => setExportOpen(true)}
         simulatorOpen={simulatorOpen}
         validating={validating}
         running={running}
@@ -307,6 +310,8 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
         workflowId={workflow.id}
         onRestored={() => void reloadDraft()}
       />
+
+      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} workflowId={workflow.id} />
     </div>
   );
 }

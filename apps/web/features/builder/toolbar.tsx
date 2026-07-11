@@ -11,6 +11,7 @@ import {
   GitBranch,
   Loader2,
   MessageCircle,
+  PackageOpen,
   Play,
   Redo2,
   ShieldCheck,
@@ -49,6 +50,7 @@ export function BuilderToolbar({
   onToggleSimulator,
   onSaveTestCase,
   onOpenVersions,
+  onOpenExport,
   simulatorOpen,
   validating,
   running,
@@ -61,6 +63,7 @@ export function BuilderToolbar({
   onToggleSimulator: () => void;
   onSaveTestCase: () => void;
   onOpenVersions: () => void;
+  onOpenExport: () => void;
   simulatorOpen: boolean;
   validating: boolean;
   running: boolean;
@@ -233,6 +236,10 @@ export function BuilderToolbar({
 
         <Button variant="secondary" size="sm" onClick={onOpenVersions}>
           <GitBranch /> Versiones
+        </Button>
+
+        <Button variant="secondary" size="sm" onClick={onOpenExport}>
+          <PackageOpen /> Exportar
         </Button>
 
         <Button

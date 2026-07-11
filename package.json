@@ -8,7 +8,7 @@
     "apps/*"
   ],
   "scripts": {
-    "build:packages": "npm run build -w @ifnodes/shared -w @ifnodes/expression-engine -w @ifnodes/node-definitions -w @ifnodes/workflow-core -w @ifnodes/database",
+    "build:packages": "npm run build -w @ifnodes/shared -w @ifnodes/expression-engine -w @ifnodes/node-definitions -w @ifnodes/workflow-core -w @ifnodes/runtime-template -w @ifnodes/database",
     "build": "npm run build:packages && npm run build -w @ifnodes/api -w @ifnodes/worker && npm run build -w @ifnodes/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",

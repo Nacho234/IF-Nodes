@@ -1,6 +1,14 @@
-# IF Nodes — Exportación y runtime de producción (especificación)
+# IF Nodes — Exportación y runtime de producción
 
-> Estado: **especificación** (se implementa en Fase 9 sobre `packages/runtime-template`). Contrato de diseño; se actualiza junto al código.
+> Estado: **implementado** (Fase 9). Runtime genérico en `packages/runtime-template`; exportador en `apps/api/src/exports/`. Verificado E2E: el proyecto exportado corre standalone (sin el monorepo, sin `node_modules`) y responde en sus endpoints.
+
+## Cómo funciona (implementación real)
+
+El exportador empaqueta el runtime genérico con **esbuild** en un único `dist/main.js` autocontenido (bundle de `workflow-core` + `node-definitions` + `expression-engine` + `shared` + `zod`, ~130 KB, sin ninguna referencia a `@ifnodes/*`). El proyecto exportado no depende del monorepo ni instala dependencias: `node dist/main.js` alcanza.
+
+El mismo bundle sirve para cualquier flujo; lo que cambia son los archivos de datos en `workflow/` (`workflow.json`, `manifest.json`, `credentials.json`). El runtime los lee del disco al arrancar, valida el grafo con el mismo motor del builder, y levanta un servidor HTTP nativo (sin framework) en `process.env.PORT`.
+
+**Secretos:** el export nunca contiene secretos. Cada credencial referida por el flujo se mapea en `credentials.json` a nombres de variables de entorno (campos secretos → `env`, no secretos → `value` inline). El runtime resuelve los secretos desde `process.env`. El `.env.example` y `manifest.requiredEnvironmentVariables` listan lo que falta completar.
 
 ## Principio
 
