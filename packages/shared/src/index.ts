@@ -5,3 +5,5 @@ export * from './workflow-graph';
 export * from './redact';
 export * from './queue';
 export * from './test-assertions';
+export * from './credential-types';
+export * from './ssrf';
