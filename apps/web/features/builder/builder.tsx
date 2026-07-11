@@ -22,6 +22,7 @@ import { ConfigPanel } from './config-panel';
 import { SimulatorPanel } from './simulator-panel';
 import { BuilderToolbar } from './toolbar';
 import { TestCaseDialog } from '@/features/tests/test-case-dialog';
+import { VersionsDialog } from './versions-dialog';
 import type { ExecutionDetail, NodeTypeInfo, SaveDraftResponse, WorkflowDetail } from '@/lib/types';
 
 const AUTOSAVE_DELAY_MS = 1200;
@@ -45,6 +46,7 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
   const [runError, setRunError] = useState<string | null>(null);
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedFor = useRef<string | null>(null);
@@ -202,6 +204,13 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
     [store],
   );
 
+  /** Recarga el borrador desde la API (tras restaurar una versión). */
+  const reloadDraft = useCallback(async () => {
+    const fresh = await api.get<WorkflowDetail>(`/workflows/${workflow.id}`);
+    const parsed = workflowGraphSchema.safeParse(fresh.draftGraph);
+    if (parsed.success) useBuilderStore.getState().initialize(parsed.data, catalog);
+  }, [workflow.id, catalog]);
+
   const addNoteAtCenter = useCallback(() => {
     const position = screenToFlowPosition({
       x: window.innerWidth / 2,
@@ -220,6 +229,7 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
         onAddNote={addNoteAtCenter}
         onToggleSimulator={() => setSimulatorOpen((open) => !open)}
         onSaveTestCase={() => setTestCaseDialogOpen(true)}
+        onOpenVersions={() => setVersionsOpen(true)}
         simulatorOpen={simulatorOpen}
         validating={validating}
         running={running}
@@ -289,6 +299,13 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
           (useBuilderStore.getState().activeExecution?.triggerData as Record<string, unknown> | null) ??
           undefined
         }
+      />
+
+      <VersionsDialog
+        open={versionsOpen}
+        onOpenChange={setVersionsOpen}
+        workflowId={workflow.id}
+        onRestored={() => void reloadDraft()}
       />
     </div>
   );

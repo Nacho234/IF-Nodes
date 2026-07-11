@@ -8,6 +8,7 @@ import {
   CircleAlert,
   ExternalLink,
   FlaskConical,
+  GitBranch,
   Loader2,
   MessageCircle,
   Play,
@@ -47,6 +48,7 @@ export function BuilderToolbar({
   onAddNote,
   onToggleSimulator,
   onSaveTestCase,
+  onOpenVersions,
   simulatorOpen,
   validating,
   running,
@@ -58,6 +60,7 @@ export function BuilderToolbar({
   onAddNote: () => void;
   onToggleSimulator: () => void;
   onSaveTestCase: () => void;
+  onOpenVersions: () => void;
   simulatorOpen: boolean;
   validating: boolean;
   running: boolean;
@@ -226,6 +229,10 @@ export function BuilderToolbar({
 
         <Button variant="secondary" size="sm" onClick={onValidate} loading={validating}>
           <ShieldCheck /> Validar
+        </Button>
+
+        <Button variant="secondary" size="sm" onClick={onOpenVersions}>
+          <GitBranch /> Versiones
         </Button>
 
         <Button

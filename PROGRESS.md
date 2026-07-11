@@ -2,7 +2,7 @@
 
 Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) · 🚧 en curso · ⬜ pendiente.
 
-Última actualización: 2026-07-11 (quinta tanda: **Fase 7 — integraciones** — credenciales cifradas, nodo HTTP con SSRF, nodos de IA con proveedores. Verificado E2E).
+Última actualización: 2026-07-11 (sexta tanda: **Fase 8 — versionado** inmutable. Verificado E2E).
 
 ## Fase 1 — Fundaciones ✅
 
@@ -50,6 +50,16 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 - ✅ Widget `select` en el panel de configuración (faltaba)
 - ✅ Flujo demo del seed actualizado al del brief: WhatsApp → variable → ¿pide turno? → rama turnos / rama general (con nota adhesiva)
 
+## Fase 8 — Versionado ✅
+
+- ✅ Publicar versión **inmutable** desde el borrador (valida antes; snapshot del grafo; sin endpoint que modifique una versión existente)
+- ✅ Marcar estable (una sola por flujo; define `Project.activeVersionId`)
+- ✅ Restaurar una versión al borrador (recarga en vivo el constructor)
+- ✅ Comparar versiones o versión↔borrador con diff funcional (`diffGraphs` puro, 5 tests): nodos agregados/eliminados/modificados (nombre, config, tipo, activación), aristas, ignora reposicionamiento
+- ✅ UI: diálogo de Versiones en el constructor (publicar con nota + estable, historial, comparar, restaurar)
+- ✅ Las ejecuciones ya referenciaban `versionId`; una versión publicada nunca cambia
+- ⬜ Duplicar versión; exportar una versión concreta (se conecta con Fase 9)
+
 ## Fase 7 — Integraciones ✅ (núcleo)
 
 - ✅ **Credenciales cifradas**: AES-256-GCM (`shared/src/crypto.ts`, solo backend), 9 tipos en catálogo, secreto cifrado al guardar y nunca devuelto (solo hint enmascarado + campos públicos). CRUD + rotar + **prueba de conexión real** (Anthropic/OpenAI/WhatsApp Cloud). UI en `/credentials`.
@@ -81,7 +91,8 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 |---|---|
 | `npm run typecheck` (7 workspaces) | ✅ |
 | `npm run lint` (7 workspaces) | ✅ 0 errores, 0 warnings |
-| Tests unitarios: shared 25 · node-definitions 22 · expression-engine 15 · workflow-core 20 | ✅ **82/82** |
+| Tests unitarios: shared 30 · node-definitions 22 · expression-engine 15 · workflow-core 20 | ✅ **87/87** |
+| E2E versionado: publicar v1 estable → modificar borrador → publicar v2 → comparar (detecta config cambiada) → marcar v2 estable (v1 deja de serlo, activeVersion=v2) → restaurar v1 (borrador vuelve al original) | ✅ |
 | E2E casos de prueba: caso "turno" con 5 assertions → PASSED persistido; caso mal planteado → FAILED con diagnóstico del recorrido real; corregido → PASSED | ✅ |
 | E2E IA (dev-echo): clasificar → "turno", generar → respuesta marcada como desarrollo, encadenado a Respuesta; UsageRecord creado | ✅ |
 | E2E SSRF: metadata/loopback/localhost bloqueados con mensaje claro; api.github.com → 200 | ✅ |

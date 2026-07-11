@@ -129,6 +129,32 @@ export interface SaveDraftResponse {
   configIssues: NodeConfigIssueDto[];
 }
 
+/* ── Versiones ─────────────────────────────────────────────── */
+
+export interface VersionRow {
+  id: string;
+  number: number;
+  description: string | null;
+  isStable: boolean;
+  createdAt: string;
+  createdBy: { name: string } | null;
+}
+
+export interface GraphDiffDto {
+  nodesAdded: { id: string; name: string; type: string }[];
+  nodesRemoved: { id: string; name: string; type: string }[];
+  nodesModified: { id: string; name: string; changes: string[] }[];
+  edgesAdded: number;
+  edgesRemoved: number;
+  hasChanges: boolean;
+}
+
+export interface CompareResponse {
+  from: string;
+  to: string;
+  diff: GraphDiffDto;
+}
+
 /* ── Credenciales ──────────────────────────────────────────── */
 
 export interface CredentialTypeDef {
