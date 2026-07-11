@@ -129,6 +129,29 @@ export interface SaveDraftResponse {
   configIssues: NodeConfigIssueDto[];
 }
 
+/* ── Plantillas ────────────────────────────────────────────── */
+
+export interface TemplateInfo {
+  slug: string;
+  name: string;
+  description: string;
+  category: string;
+  projectType: ProjectType;
+  requiredIntegrations: string[];
+  nodeCount: number;
+}
+
+/* ── Usuarios / equipo ─────────────────────────────────────── */
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  active: boolean;
+  createdAt: string;
+}
+
 /* ── Variables por entorno ─────────────────────────────────── */
 
 export interface EnvVarView {

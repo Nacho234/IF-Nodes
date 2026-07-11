@@ -8,3 +8,4 @@ export * from './test-assertions';
 export * from './credential-types';
 export * from './ssrf';
 export * from './graph-diff';
+export * from './templates';

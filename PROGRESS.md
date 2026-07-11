@@ -9,7 +9,9 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 - ✅ Variables por entorno: API (crear/editar/borrar, secretas cifradas AES-GCM), worker descifra para `{{environment.X}}`, UI por proyecto con pestañas Dev/Testing/Prod — verificado E2E (plana + secreta resueltas)
 - ✅ **Tests E2E con Playwright** (`apps/web/e2e/`, 7 tests): login autorizado + rechazo, inicio, crear cliente, abrir constructor (canvas con nodos), credenciales/exportaciones. Setup con sesión reusada para no agotar el rate-limit. `npm run test:e2e -w @ifnodes/web` (requiere el stack corriendo + seed)
 - ✅ **Bug crítico corregido (lo cazó el E2E)**: el constructor entraba en bucle infinito de renders y crasheaba con "Maximum update depth exceeded" — nunca se había renderizado en un navegador real (se ejecutaba por API). Causa: `onSelectionChange` de React Flow llamaba `setSelected` repetidamente y el set idéntico igual notificaba a Zustand; y un selector devolvía un array nuevo por render. Corregidos ambos (guarda de igualdad en `setSelected` + seleccionar array estable y filtrar en render)
-- ⬜ SSE en vivo (hoy polling), nodos de envío real WhatsApp/SMTP, accesibilidad (pasada con axe), reportes de consumo
+- ✅ **Configuración** (página real): tu cuenta, equipo (lista de usuarios con rol; el OWNER puede cambiar roles, auditado), referencia de roles, resumen de seguridad del entorno. API: `GET /users`, `PATCH /users/:id/role` (owner-only, no toca a otros OWNER)
+- ✅ **Plantillas** (página real): 4 plantillas iniciales con grafo válido (turnos, FAQ con IA, clasificar+derivar, webhook con IA); "Usar plantilla" crea un proyecto nuevo con el flujo. Grafos validados con tests (43 en shared). Verificado E2E: usar plantilla → proyecto con flujo ejecutable
+- ⬜ SSE en vivo (hoy polling), nodos de envío real WhatsApp/SMTP, accesibilidad (pasada con axe), reportes de consumo de IA
 
 ## Fase 1 — Fundaciones ✅
 

@@ -27,6 +27,8 @@ import { ExportsController } from './exports/exports.controller';
 import { ExportsService } from './exports/exports.service';
 import { EnvironmentsController } from './environments/environments.controller';
 import { EnvironmentsService } from './environments/environments.service';
+import { UsersController } from './users/users.controller';
+import { TemplatesController } from './templates/templates.controller';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -47,6 +49,8 @@ import { HealthController } from './health/health.controller';
     VersionsController,
     ExportsController,
     EnvironmentsController,
+    UsersController,
+    TemplatesController,
     HealthController,
   ],
   providers: [
