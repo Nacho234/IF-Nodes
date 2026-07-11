@@ -97,10 +97,11 @@ export interface NodeTypeInfo {
     field: string;
     label: string;
     helpText?: string;
-    widget: 'text' | 'textarea' | 'code' | 'select' | 'switch' | 'number' | 'keyvalue';
+    widget: 'text' | 'textarea' | 'code' | 'select' | 'switch' | 'number' | 'keyvalue' | 'credential';
     options?: { value: string; label: string }[];
     placeholder?: string;
     supportsExpressions?: boolean;
+    credentialTypes?: string[];
   }[];
   outputVariables: { path: string; description: string }[];
   documentation: string;
@@ -126,6 +127,30 @@ export interface SaveDraftResponse {
   savedAt: string;
   structureIssues: GraphIssueDto[];
   configIssues: NodeConfigIssueDto[];
+}
+
+/* ── Credenciales ──────────────────────────────────────────── */
+
+export interface CredentialTypeDef {
+  slug: string;
+  name: string;
+  description: string;
+  fields: { key: string; label: string; secret: boolean; placeholder?: string }[];
+  verifiable: boolean;
+}
+
+export interface CredentialView {
+  id: string;
+  name: string;
+  integrationSlug: string;
+  integrationName: string;
+  environment: string;
+  projectId: string | null;
+  active: boolean;
+  lastVerifiedAt: string | null;
+  maskedHint: string | null;
+  publicFields: Record<string, string>;
+  createdAt: string;
 }
 
 /* ── Casos de prueba ───────────────────────────────────────── */

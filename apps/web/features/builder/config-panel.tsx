@@ -6,9 +6,60 @@ import { CodeTextarea, Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/misc';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { isFlowNode, useBuilderStore } from './store';
 import { categoryColor, nodeIcon } from './node-visuals';
-import type { NodeTypeInfo } from '@/lib/types';
+import { api } from '@/lib/api';
+import type { CredentialView, NodeTypeInfo } from '@/lib/types';
+
+/** Selector de credencial para el widget 'credential'; filtra por tipo aceptado. */
+function CredentialSelect({
+  value,
+  credentialTypes,
+  onChange,
+  fieldId,
+}: {
+  value: string;
+  credentialTypes: string[];
+  onChange: (value: string) => void;
+  fieldId: string;
+}) {
+  const credentials = useQuery({
+    queryKey: ['credentials'],
+    queryFn: () => api.get<CredentialView[]>('/credentials'),
+    staleTime: 30_000,
+  });
+  const options = (credentials.data ?? []).filter(
+    (cred) => credentialTypes.length === 0 || credentialTypes.includes(cred.integrationSlug),
+  );
+  const NONE = '__none__';
+  return (
+    <div className="space-y-1">
+      <Select value={value || NONE} onValueChange={(v) => onChange(v === NONE ? '' : v)}>
+        <SelectTrigger id={fieldId}>
+          <SelectValue placeholder="Sin credencial (modo desarrollo)" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE}>Sin credencial (modo desarrollo)</SelectItem>
+          {options.map((cred) => (
+            <SelectItem key={cred.id} value={cred.id}>
+              {cred.name} · {cred.integrationName}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {!credentials.isLoading && options.length === 0 ? (
+        <p className="text-[11px] text-faint-foreground">
+          No hay credenciales de este tipo.{' '}
+          <Link href="/credentials" className="text-accent hover:underline">
+            Crear una
+          </Link>
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function JsonPreview({ value }: { value: unknown }) {
   return (
@@ -169,6 +220,13 @@ export function ConfigPanel({ webhookToken }: { webhookToken?: string }) {
                   value={String(raw ?? '')}
                   placeholder={hint.placeholder}
                   onChange={(event) => setConfigValue(hint.field, event.target.value)}
+                />
+              ) : hint.widget === 'credential' ? (
+                <CredentialSelect
+                  fieldId={fieldId}
+                  value={String(raw ?? '')}
+                  credentialTypes={hint.credentialTypes ?? []}
+                  onChange={(value) => setConfigValue(hint.field, value)}
                 />
               ) : hint.widget === 'select' ? (
                 <Select

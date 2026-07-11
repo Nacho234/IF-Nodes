@@ -444,3 +444,24 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([userId])
 }
+
+// ── Uso de IA ───────────────────────────────────────────────────
+
+model UsageRecord {
+  id            String   @id @default(cuid())
+  projectId     String?
+  executionId   String?
+  nodeId        String?
+  provider      String
+  model         String
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  /// Costo estimado en USD (0 para el proveedor de desarrollo)
+  estimatedCost Float    @default(0)
+  status        String   @default("ok")
+  error         String?
+  createdAt     DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([executionId])
+}

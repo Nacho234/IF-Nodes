@@ -7,6 +7,9 @@ import { switchNode } from './nodes/logic/switch';
 import { setVariableNode } from './nodes/logic/set-variable';
 import { transformNode } from './nodes/data/transform';
 import { respondNode } from './nodes/communication/respond';
+import { httpRequestNode } from './nodes/integrations/http-request';
+import { aiGenerateNode } from './nodes/ai/generate';
+import { aiClassifyNode } from './nodes/ai/classify';
 
 /**
  * Registro central de nodos. Agregar un nodo nuevo = crear su archivo
@@ -23,6 +26,9 @@ const definitions = [
   switchNode,
   setVariableNode,
   transformNode,
+  aiClassifyNode,
+  aiGenerateNode,
+  httpRequestNode,
   respondNode,
 ] as unknown as NodeDefinition[];
 

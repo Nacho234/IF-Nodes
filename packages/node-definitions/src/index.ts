@@ -8,3 +8,6 @@ export { switchNode } from './nodes/logic/switch';
 export { setVariableNode } from './nodes/logic/set-variable';
 export { transformNode } from './nodes/data/transform';
 export { respondNode } from './nodes/communication/respond';
+export { httpRequestNode } from './nodes/integrations/http-request';
+export { aiGenerateNode } from './nodes/ai/generate';
+export { aiClassifyNode } from './nodes/ai/classify';

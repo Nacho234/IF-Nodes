@@ -482,8 +482,8 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
     if (result?.variables) {
       Object.assign(context.variables, result.variables);
     }
-    // {{trigger.*}} expone la salida normalizada del disparador
-    if (definition.category === 'trigger' && output && typeof output === 'object' && !Array.isArray(output)) {
+    // {{trigger.*}} expone la salida normalizada del disparador (por "sin entradas", no por categoría)
+    if (isTriggerDef(node.type) && output && typeof output === 'object' && !Array.isArray(output)) {
       context.trigger = output as Record<string, unknown>;
     }
     await finishStep('SUCCEEDED', output);

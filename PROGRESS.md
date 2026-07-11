@@ -2,7 +2,7 @@
 
 Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) · 🚧 en curso · ⬜ pendiente.
 
-Última actualización: 2026-07-11 (cuarta tanda: **Fase 6 — casos de prueba** con assertions, verificado E2E).
+Última actualización: 2026-07-11 (quinta tanda: **Fase 7 — integraciones** — credenciales cifradas, nodo HTTP con SSRF, nodos de IA con proveedores. Verificado E2E).
 
 ## Fase 1 — Fundaciones ✅
 
@@ -50,6 +50,15 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 - ✅ Widget `select` en el panel de configuración (faltaba)
 - ✅ Flujo demo del seed actualizado al del brief: WhatsApp → variable → ¿pide turno? → rama turnos / rama general (con nota adhesiva)
 
+## Fase 7 — Integraciones ✅ (núcleo)
+
+- ✅ **Credenciales cifradas**: AES-256-GCM (`shared/src/crypto.ts`, solo backend), 9 tipos en catálogo, secreto cifrado al guardar y nunca devuelto (solo hint enmascarado + campos públicos). CRUD + rotar + **prueba de conexión real** (Anthropic/OpenAI/WhatsApp Cloud). UI en `/credentials`.
+- ✅ **Nodo HTTP Request** con **guarda SSRF** en el worker: resuelve DNS y bloquea loopback/privadas/link-local/metadata/localhost/`.internal`; redirecciones re-validadas por salto; timeout y tamaño de respuesta acotados; política `block-private`/`allowlist` por env. Credenciales http-bearer/api-key inyectadas de forma segura.
+- ✅ **Nodos de IA** (`ai.generate`, `ai.classify`) detrás de capa de proveedores: `dev-echo` (sin credencial, sin costo, claramente marcado), Anthropic y OpenAI reales según la credencial. Registro de uso (`UsageRecord`: provider/model/tokens/costo estimado por nodo y ejecución).
+- ✅ Widget `credential` en el panel del constructor (dropdown filtrado por tipo, link a crear).
+- 🔶 Variables por entorno: modelos y lectura en el worker listos; **falta la UI** para editarlas por entorno (Dev/Testing/Prod).
+- ⬜ WhatsApp Cloud como nodo de envío real (`sendText`/`sendInteractive`) — hoy solo el trigger simulado; SMTP real.
+
 ## Fase 6 — Casos de prueba ✅ (núcleo)
 
 - ✅ Assertions tipadas (schema Zod + evaluador puro en `shared`, 9 tests): igual a, contiene, existe, no existe, tipo, mayor/menor, nodo visitado/no visitado, estado final — con paths sobre `output.*`, `nodes.<id>.output.*`, `variables.*`, `trigger.*` (anti prototype-pollution)
@@ -72,8 +81,11 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 |---|---|
 | `npm run typecheck` (7 workspaces) | ✅ |
 | `npm run lint` (7 workspaces) | ✅ 0 errores, 0 warnings |
-| Tests unitarios: shared 19 · node-definitions 22 · expression-engine 15 · workflow-core 20 | ✅ **76/76** |
+| Tests unitarios: shared 25 · node-definitions 22 · expression-engine 15 · workflow-core 20 | ✅ **82/82** |
 | E2E casos de prueba: caso "turno" con 5 assertions → PASSED persistido; caso mal planteado → FAILED con diagnóstico del recorrido real; corregido → PASSED | ✅ |
+| E2E IA (dev-echo): clasificar → "turno", generar → respuesta marcada como desarrollo, encadenado a Respuesta; UsageRecord creado | ✅ |
+| E2E SSRF: metadata/loopback/localhost bloqueados con mensaje claro; api.github.com → 200 | ✅ |
+| E2E credenciales: cifrado en reposo (sin fuga del secreto en DB), hint enmascarado, verify real contra Anthropic (401 con key falsa), rotar/borrar | ✅ |
 | E2E rama "turno": WhatsApp sim → variable → condición true → respuesta personalizada con `{{trigger.name}}` y `{{variables.empresa}}` | ✅ |
 | E2E rama "general": condición false → respuesta general | ✅ |
 | E2E webhook público: `POST /hooks/:token` → 202 → worker → SUCCEEDED; token inválido → 404 | ✅ |

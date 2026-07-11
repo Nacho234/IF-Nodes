@@ -19,6 +19,8 @@ import { ExecutionsService } from './executions/executions.service';
 import { HooksController } from './webhooks/hooks.controller';
 import { TestCasesController } from './testcases/testcases.controller';
 import { TestCasesService } from './testcases/testcases.service';
+import { CredentialsController } from './credentials/credentials.controller';
+import { CredentialsService } from './credentials/credentials.service';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -35,6 +37,7 @@ import { HealthController } from './health/health.controller';
     ExecutionsController,
     HooksController,
     TestCasesController,
+    CredentialsController,
     HealthController,
   ],
   providers: [
@@ -49,6 +52,7 @@ import { HealthController } from './health/health.controller';
     WorkflowsService,
     ExecutionsService,
     TestCasesService,
+    CredentialsService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

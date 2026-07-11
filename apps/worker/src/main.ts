@@ -20,6 +20,7 @@ import {
   type ExecutionJobData,
 } from '@ifnodes/shared';
 import { executeWorkflow, type StepRecord } from '@ifnodes/workflow-core';
+import { buildServices } from './services';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
@@ -74,6 +75,13 @@ async function processExecution(job: Job<ExecutionJobData>): Promise<void> {
   const stepIds = new Map<string, string>();
   const startedAtMs = Date.now();
 
+  // Servicios inyectados (HTTP con SSRF, IA); nodeIdRef atribuye el uso al nodo en curso
+  const nodeIdRef = { current: '' };
+  const services = buildServices(
+    { prisma, projectId: execution.projectId, executionId },
+    nodeIdRef,
+  );
+
   const result = await executeWorkflow({
     graph,
     ids: {
@@ -84,10 +92,12 @@ async function processExecution(job: Job<ExecutionJobData>): Promise<void> {
     },
     trigger: (execution.triggerData as Record<string, unknown> | null) ?? {},
     environment,
+    services,
     resolveDefinition: (type, version) => nodeRegistry.get(type, version),
     limits: ENGINE_LIMITS,
     hooks: {
       async onStepStart(step: StepRecord) {
+        nodeIdRef.current = step.nodeId;
         const row = await prisma.executionStep.create({
           data: {
             executionId,

@@ -46,11 +46,13 @@ export interface ConfigFieldUiHint {
   field: string;
   label: string;
   helpText?: string;
-  widget: 'text' | 'textarea' | 'code' | 'select' | 'switch' | 'number' | 'keyvalue';
+  widget: 'text' | 'textarea' | 'code' | 'select' | 'switch' | 'number' | 'keyvalue' | 'credential';
   options?: { value: string; label: string }[];
   placeholder?: string;
   /** El campo admite expresiones {{ ... }} */
   supportsExpressions?: boolean;
+  /** Para widget 'credential': slugs de tipo aceptados (p.ej. ['openai','anthropic']) */
+  credentialTypes?: string[];
 }
 
 export interface NodeLogger {
@@ -60,13 +62,64 @@ export interface NodeLogger {
   error(message: string, data?: Record<string, unknown>): void;
 }
 
+/* ── Servicios inyectados (implementados por el worker/runtime) ── */
+
+export interface AIGenerateInput {
+  credentialId?: string;
+  model?: string;
+  system?: string;
+  prompt: string;
+  maxTokens?: number;
+}
+export interface AIGenerateResult {
+  text: string;
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+export interface AIClassifyInput {
+  credentialId?: string;
+  model?: string;
+  text: string;
+  categories: string[];
+}
+export interface AIClassifyResult {
+  category: string;
+  provider: string;
+  model: string;
+}
+export interface AIService {
+  generateText(input: AIGenerateInput): Promise<AIGenerateResult>;
+  classify(input: AIClassifyInput): Promise<AIClassifyResult>;
+}
+
+export interface HttpRequestInput {
+  method: string;
+  url: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+  timeoutMs?: number;
+  credentialId?: string;
+}
+export interface HttpResult {
+  status: number;
+  ok: boolean;
+  headers: Record<string, string>;
+  body: unknown;
+}
+export interface HttpService {
+  request(input: HttpRequestInput): Promise<HttpResult>;
+}
+
 /**
  * Servicios inyectados: los nodos NUNCA acceden a red/DB/providers por import
- * directo. El builder inyecta implementaciones reales o simuladas; el runtime
- * exportado inyecta las livianas. (Se puebla a partir de Fase 3/7.)
+ * directo. El worker inyecta implementaciones reales; el runtime exportado, las
+ * livianas; el simulador/tests, ninguna (los nodos que las requieren avisan).
  */
 export interface NodeServices {
-  [key: string]: unknown;
+  ai?: AIService;
+  http?: HttpService;
 }
 
 export interface NodeExecutionContext<TConfig = unknown, TInput = unknown> {

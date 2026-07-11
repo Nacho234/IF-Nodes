@@ -75,7 +75,12 @@ interface NodeDefinition<TConfig = unknown, TInput = unknown, TOutput = unknown>
 | `logic.switch` | 1 | logic | ✅ | 3 casos + `default` |
 | `logic.set-variable` | 1 | logic | ✅ | escribe en `{{variables.*}}` vía `result.variables` |
 | `data.transform` | 1 | data | ✅ | asignaciones con paths anidados |
+| `ai.classify` | 1 | ai | ✅ | clasifica intención (dev-echo / Anthropic / OpenAI) |
+| `ai.generate` | 1 | ai | ✅ | genera texto vía `AIProvider` |
+| `integrations.http-request` | 1 | integrations | ✅ | HTTP con guarda SSRF en el worker |
 | `communication.respond` | 1 | communication | ✅ | respuesta final del flujo |
+
+Los nodos con IO real (HTTP, IA) usan `context.services` (inyectado por el worker): nunca importan `fetch`/providers directo. En el simulador puro o los tests, `services` viene vacío y el nodo avisa con un error claro.
 
 Nota: un nodo es **disparador** si no tiene puertos de entrada (`inputs: []`), sin importar su categoría visual (p.ej. el trigger de WhatsApp vive en la categoría `whatsapp`).
 
