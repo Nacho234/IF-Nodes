@@ -59,11 +59,23 @@ export function SimulatorPanel({
     setMessages((current) => [...current, { id: messageId, from: 'client', text }]);
     try {
       const execution = await onSend({ text, phone, name, messageType: 'text', channel: 'whatsapp' });
-      const reply = (execution.context?.finalOutput as { message?: string } | undefined)?.message;
-      if (execution.status === 'SUCCEEDED' && typeof reply === 'string') {
+      // Los mensajes del bot salen de los nodos Respuesta y Enviar WhatsApp
+      const replies: string[] = [];
+      for (const step of execution.steps) {
+        if (step.status !== 'SUCCEEDED' || !step.output || typeof step.output !== 'object') continue;
+        const out = step.output as { message?: unknown; text?: unknown };
+        if (step.nodeType === 'communication.respond' && typeof out.message === 'string') replies.push(out.message);
+        if (step.nodeType === 'whatsapp.send-text' && typeof out.text === 'string') replies.push(out.text);
+      }
+      if (execution.status === 'SUCCEEDED' && replies.length > 0) {
         setMessages((current) => [
           ...current,
-          { id: `${messageId}-r`, from: 'bot', text: reply, executionId: execution.id },
+          ...replies.map((reply, i) => ({
+            id: `${messageId}-r${i}`,
+            from: 'bot' as const,
+            text: reply,
+            executionId: execution.id,
+          })),
         ]);
       } else if (execution.status === 'SUCCEEDED') {
         setMessages((current) => [
@@ -71,7 +83,7 @@ export function SimulatorPanel({
           {
             id: `${messageId}-r`,
             from: 'system',
-            text: 'El flujo terminó sin un nodo Respuesta en esta rama (no hay mensaje para el cliente).',
+            text: 'El flujo terminó sin un nodo Respuesta ni Enviar WhatsApp en esta rama (no hay mensaje para el cliente).',
             executionId: execution.id,
           },
         ]);

@@ -78,6 +78,7 @@ interface NodeDefinition<TConfig = unknown, TInput = unknown, TOutput = unknown>
 | `ai.classify` | 1 | ai | ✅ | clasifica intención (dev-echo / Anthropic / OpenAI) |
 | `ai.generate` | 1 | ai | ✅ | genera texto vía `AIProvider` |
 | `integrations.http-request` | 1 | integrations | ✅ | HTTP con guarda SSRF en el worker |
+| `whatsapp.send-text` | 1 | whatsapp | ✅ | envía por WhatsApp Cloud (real con credencial, simulado sin ella) |
 | `communication.respond` | 1 | communication | ✅ | respuesta final del flujo |
 
 Los nodos con IO real (HTTP, IA) usan `context.services` (inyectado por el worker): nunca importan `fetch`/providers directo. En el simulador puro o los tests, `services` viene vacío y el nodo avisa con un error claro.

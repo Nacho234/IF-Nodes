@@ -5,6 +5,7 @@
  */
 import { lookup } from 'node:dns/promises';
 import { checkSsrf, ssrfPolicyFromEnv } from '@ifnodes/shared';
+import { sendWhatsAppText } from '@ifnodes/node-definitions';
 import type {
   AIClassifyInput,
   AIClassifyResult,
@@ -13,6 +14,8 @@ import type {
   HttpRequestInput,
   HttpResult,
   NodeServices,
+  WhatsAppSendInput,
+  WhatsAppSendResult,
 } from '@ifnodes/node-definitions';
 
 /** Mapa credentialId → { slug, fields: { key: {env}|{value} } } */
@@ -192,5 +195,21 @@ export function buildRuntimeServices(credentials: CredentialManifest): NodeServi
     },
   };
 
-  return { http, ai };
+  const whatsapp: NodeServices['whatsapp'] = {
+    async sendText(input: WhatsAppSendInput): Promise<WhatsAppSendResult> {
+      const cred = input.credentialId ? resolveCredential(credentials, input.credentialId) : null;
+      if (cred?.slug === 'whatsapp-cloud' && cred.data.accessToken && cred.data.phoneNumberId) {
+        const { messageId } = await sendWhatsAppText({
+          accessToken: cred.data.accessToken,
+          phoneNumberId: cred.data.phoneNumberId,
+          to: input.to,
+          text: input.text,
+        });
+        return { to: input.to, text: input.text, sent: true, simulated: false, messageId };
+      }
+      return { to: input.to, text: input.text, sent: false, simulated: true };
+    },
+  };
+
+  return { http, ai, whatsapp };
 }

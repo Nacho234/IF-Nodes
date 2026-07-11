@@ -112,6 +112,24 @@ export interface HttpService {
   request(input: HttpRequestInput): Promise<HttpResult>;
 }
 
+export interface WhatsAppSendInput {
+  credentialId?: string;
+  /** Número destino (E.164 sin +), típicamente {{trigger.phone}} */
+  to: string;
+  text: string;
+}
+export interface WhatsAppSendResult {
+  to: string;
+  text: string;
+  /** true si se envió por la API real; false si fue simulado (sin credencial) */
+  sent: boolean;
+  simulated: boolean;
+  messageId?: string;
+}
+export interface WhatsAppService {
+  sendText(input: WhatsAppSendInput): Promise<WhatsAppSendResult>;
+}
+
 /**
  * Servicios inyectados: los nodos NUNCA acceden a red/DB/providers por import
  * directo. El worker inyecta implementaciones reales; el runtime exportado, las
@@ -120,6 +138,7 @@ export interface HttpService {
 export interface NodeServices {
   ai?: AIService;
   http?: HttpService;
+  whatsapp?: WhatsAppService;
 }
 
 export interface NodeExecutionContext<TConfig = unknown, TInput = unknown> {

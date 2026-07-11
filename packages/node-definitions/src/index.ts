@@ -11,3 +11,6 @@ export { respondNode } from './nodes/communication/respond';
 export { httpRequestNode } from './nodes/integrations/http-request';
 export { aiGenerateNode } from './nodes/ai/generate';
 export { aiClassifyNode } from './nodes/ai/classify';
+export { whatsappSendTextNode } from './nodes/whatsapp/send-text';
+export { parseWhatsAppWebhook } from './whatsapp/parse-webhook';
+export { sendWhatsAppText } from './whatsapp/cloud-api';

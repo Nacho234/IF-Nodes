@@ -10,6 +10,7 @@ import { respondNode } from './nodes/communication/respond';
 import { httpRequestNode } from './nodes/integrations/http-request';
 import { aiGenerateNode } from './nodes/ai/generate';
 import { aiClassifyNode } from './nodes/ai/classify';
+import { whatsappSendTextNode } from './nodes/whatsapp/send-text';
 
 /**
  * Registro central de nodos. Agregar un nodo nuevo = crear su archivo
@@ -29,6 +30,7 @@ const definitions = [
   aiClassifyNode,
   aiGenerateNode,
   httpRequestNode,
+  whatsappSendTextNode,
   respondNode,
 ] as unknown as NodeDefinition[];
 

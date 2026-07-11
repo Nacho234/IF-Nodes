@@ -213,3 +213,79 @@ describe('trigger.webhook', () => {
     });
   });
 });
+
+import { parseWhatsAppWebhook } from './whatsapp/parse-webhook';
+import { whatsappSendTextNode } from './nodes/whatsapp/send-text';
+
+describe('parseWhatsAppWebhook', () => {
+  it('parsea un mensaje de texto real de Meta con nombre de contacto', () => {
+    const payload = {
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                contacts: [{ wa_id: '5493410000000', profile: { name: 'Nico' } }],
+                messages: [{ from: '5493410000000', id: 'wamid.X', type: 'text', text: { body: 'Hola, quiero un turno' } }],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const messages = parseWhatsAppWebhook(payload);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      text: 'Hola, quiero un turno',
+      phone: '5493410000000',
+      name: 'Nico',
+      channel: 'whatsapp',
+      messageType: 'text',
+    });
+  });
+
+  it('parsea respuestas de botón interactivo', () => {
+    const payload = {
+      entry: [{ changes: [{ value: { messages: [{ from: '549', type: 'interactive', interactive: { button_reply: { title: 'Sí' } } }] } }] }],
+    };
+    const [msg] = parseWhatsAppWebhook(payload);
+    expect(msg?.text).toBe('Sí');
+    expect(msg?.messageType).toBe('button');
+  });
+
+  it('devuelve vacío ante payloads no-WhatsApp o mal formados', () => {
+    expect(parseWhatsAppWebhook(null)).toEqual([]);
+    expect(parseWhatsAppWebhook({})).toEqual([]);
+    expect(parseWhatsAppWebhook({ entry: [{}] })).toEqual([]);
+  });
+});
+
+describe('whatsapp.send-text', () => {
+  it('simula el envío sin servicio de WhatsApp real', async () => {
+    const config = whatsappSendTextNode.configSchema.parse({ to: '549', text: 'Hola' });
+    const services = {
+      whatsapp: {
+        async sendText(input) {
+          return { to: input.to, text: input.text, sent: false, simulated: true };
+        },
+      },
+    };
+    const result = await whatsappSendTextNode.execute({
+      config,
+      input: {},
+      nodeId: 'n',
+      executionId: 'e',
+      logger: silentLogger,
+      signal: new AbortController().signal,
+      services,
+    });
+    expect(result).toEqual({ output: { to: '549', text: 'Hola', sent: false, simulated: true } });
+  });
+
+  it('falla claro si no hay servicio de WhatsApp (simulador puro)', async () => {
+    const config = whatsappSendTextNode.configSchema.parse({ to: '549', text: 'Hola' });
+    await expect(
+      whatsappSendTextNode.execute(contextWith(config, {})),
+    ).rejects.toThrow('solo se ejecuta en el worker');
+  });
+});

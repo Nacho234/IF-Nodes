@@ -6,6 +6,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parseWhatsAppWebhook } from '@ifnodes/node-definitions';
 import { loadRuntime, runFlow, replyFromResult, type RuntimeManifest } from './runtime';
 import type { CredentialManifest } from './services';
 
@@ -101,7 +102,30 @@ function main(): void {
       return send(res, 403, { error: 'verify_failed' });
     }
 
-    // Ejecución del flujo: POST /run (entrada = body como trigger) y /webhooks/*
+    // Webhook de WhatsApp: parsear el payload de Meta y ejecutar por mensaje.
+    // El nodo "Enviar mensaje de WhatsApp" del flujo envía la respuesta real.
+    if (path === '/webhooks/whatsapp' && method === 'POST' && loaded.hasWhatsAppTrigger) {
+      let payload: unknown;
+      try {
+        payload = await readBody(req);
+      } catch {
+        return send(res, 413, { error: 'payload_too_large' });
+      }
+      const messages = parseWhatsAppWebhook(payload);
+      // Meta espera 200 rápido; procesamos cada mensaje y respondemos ok
+      for (const message of messages) {
+        const started = Date.now();
+        const result = await runFlow(loaded, message as unknown as Record<string, unknown>);
+        log('info', 'Mensaje de WhatsApp procesado', {
+          from: message.phone,
+          status: result.status,
+          ms: Date.now() - started,
+        });
+      }
+      return send(res, 200, { status: 'ok', processed: messages.length });
+    }
+
+    // Ejecución genérica: POST /run (entrada = body como trigger) y /webhooks/*
     if ((path === '/run' || path.startsWith('/webhooks/')) && method === 'POST') {
       let input: Record<string, unknown>;
       try {

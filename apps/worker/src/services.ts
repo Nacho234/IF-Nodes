@@ -7,6 +7,7 @@ import { lookup } from 'node:dns/promises';
 import type { PrismaClient } from '@ifnodes/database';
 import { checkSsrf, ssrfPolicyFromEnv } from '@ifnodes/shared';
 import { decryptSecret } from '@ifnodes/shared/dist/crypto';
+import { sendWhatsAppText } from '@ifnodes/node-definitions';
 import type {
   AIClassifyInput,
   AIClassifyResult,
@@ -15,6 +16,8 @@ import type {
   HttpRequestInput,
   HttpResult,
   NodeServices,
+  WhatsAppSendInput,
+  WhatsAppSendResult,
 } from '@ifnodes/node-definitions';
 
 interface ServiceContext {
@@ -309,9 +312,30 @@ function makeAIService(ctx: ServiceContext, nodeIdRef: { current: string }): Nod
  * Construye los servicios para una ejecución. `nodeIdRef` lo actualiza el
  * worker en cada paso para atribuir el uso de IA al nodo correcto.
  */
+function makeWhatsAppService(ctx: ServiceContext): NodeServices['whatsapp'] {
+  const resolveCredential = makeCredentialResolver(ctx);
+  return {
+    async sendText(input: WhatsAppSendInput): Promise<WhatsAppSendResult> {
+      const cred = input.credentialId ? await resolveCredential(input.credentialId) : null;
+      if (cred?.slug === 'whatsapp-cloud' && cred.data.accessToken && cred.data.phoneNumberId) {
+        const { messageId } = await sendWhatsAppText({
+          accessToken: cred.data.accessToken,
+          phoneNumberId: cred.data.phoneNumberId,
+          to: input.to,
+          text: input.text,
+        });
+        return { to: input.to, text: input.text, sent: true, simulated: false, messageId };
+      }
+      // Sin credencial: simulado (el simulador muestra el texto igual)
+      return { to: input.to, text: input.text, sent: false, simulated: true };
+    },
+  };
+}
+
 export function buildServices(ctx: ServiceContext, nodeIdRef: { current: string }): NodeServices {
   return {
     http: makeHttpService(ctx),
     ai: makeAIService(ctx, nodeIdRef),
+    whatsapp: makeWhatsAppService(ctx),
   };
 }
