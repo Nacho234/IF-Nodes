@@ -4,7 +4,6 @@ export default function TemplatesPage() {
   return (
     <PlannedSection
       title="Plantillas"
-      phase="Fase 6+"
       description="Proyectos y flujos reutilizables como punto de partida."
       bullets={[
         'Guardar un proyecto o flujo como plantilla interna',

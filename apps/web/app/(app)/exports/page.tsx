@@ -4,7 +4,6 @@ export default function ExportsPage() {
   return (
     <PlannedSection
       title="Exportaciones"
-      phase="Fase 9"
       description="Generación del runtime independiente listo para producción."
       bullets={[
         'Runtime genérico + workflow.json + manifest.json',

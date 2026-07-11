@@ -14,8 +14,8 @@ import type { ProjectDetail } from '@/lib/types';
  * "planificadas" (texto informativo, sin botones muertos).
  */
 const UPCOMING_SECTIONS = [
-  { name: 'Variables por entorno', phase: 'Fase 7' },
-  { name: 'Exportar runtime', phase: 'Fase 9' },
+  { name: 'Variables por entorno', phase: 'próximamente' },
+  { name: 'Exportar runtime', phase: 'próximamente' },
 ];
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {

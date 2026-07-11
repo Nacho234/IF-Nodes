@@ -8,12 +8,10 @@ import { PageHeader } from '@/components/shell/page-header';
  */
 export function PlannedSection({
   title,
-  phase,
   description,
   bullets,
 }: {
   title: string;
-  phase: string;
   description: string;
   bullets: string[];
 }) {
@@ -23,7 +21,7 @@ export function PlannedSection({
       <div className="flex flex-1 items-start p-6">
         <div className="mx-auto mt-10 w-full max-w-md rounded-lg border border-dashed border-border-strong px-8 py-10 text-center">
           <CalendarClock className="mx-auto size-8 stroke-[1.5] text-faint-foreground" aria-hidden />
-          <p className="mt-4 text-sm font-medium">Planificado para la {phase}</p>
+          <p className="mt-4 text-sm font-medium">Próximamente</p>
           <p className="mt-1 text-[13px] text-muted-foreground">
             Esta sección todavía no está construida. Va a incluir:
           </p>
@@ -35,9 +33,6 @@ export function PlannedSection({
               </li>
             ))}
           </ul>
-          <p className="mt-5 font-mono text-[11px] text-faint-foreground">
-            El orden de fases está en PROJECT_PLAN.md
-          </p>
         </div>
       </div>
     </>
