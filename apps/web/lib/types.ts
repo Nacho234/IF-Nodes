@@ -76,6 +76,7 @@ export interface WorkflowDetail {
   projectId: string;
   name: string;
   isMain: boolean;
+  webhookToken: string;
   draftGraph: unknown;
   updatedAt: string;
   project: { id: string; name: string; clientId: string; client: { name: string } };

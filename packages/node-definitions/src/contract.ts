@@ -80,9 +80,13 @@ export interface NodeExecutionContext<TConfig = unknown, TInput = unknown> {
   services: NodeServices;
 }
 
-export type NodeExecutionResult<TOutput = unknown> =
+export type NodeExecutionResult<TOutput = unknown> = (
   | { output: TOutput }
-  | { outputsByPort: Record<string, unknown> };
+  | { outputsByPort: Record<string, unknown> }
+) & {
+  /** Variables a fusionar en context.variables (p.ej. nodo "Establecer variable") */
+  variables?: Record<string, unknown>;
+};
 
 export class NodeExecutionError extends Error {
   readonly code: string;

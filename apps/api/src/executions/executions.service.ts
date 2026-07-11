@@ -146,6 +146,11 @@ export class ExecutionsService implements OnModuleDestroy {
     return execution;
   }
 
+  /** Encola una ejecución ya creada (usado por el endpoint público de webhooks). */
+  async enqueueExisting(executionId: string): Promise<void> {
+    return this.enqueue(executionId);
+  }
+
   private async enqueue(executionId: string): Promise<void> {
     try {
       // jobId determinista = idempotencia: la misma ejecución no se encola dos veces

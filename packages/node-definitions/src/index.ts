@@ -1,5 +1,10 @@
 export * from './contract';
 export * from './registry';
 export { manualTriggerNode } from './nodes/trigger/manual-trigger';
+export { webhookTriggerNode } from './nodes/trigger/webhook-trigger';
+export { whatsappTriggerNode, type WhatsAppIncomingMessage } from './nodes/trigger/whatsapp-trigger';
+export { conditionNode, CONDITION_OPERATORS } from './nodes/logic/condition';
+export { switchNode } from './nodes/logic/switch';
+export { setVariableNode } from './nodes/logic/set-variable';
 export { transformNode } from './nodes/data/transform';
 export { respondNode } from './nodes/communication/respond';

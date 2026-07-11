@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { nodeRegistry } from './registry';
 import { manualTriggerNode } from './nodes/trigger/manual-trigger';
+import { webhookTriggerNode } from './nodes/trigger/webhook-trigger';
+import { whatsappTriggerNode } from './nodes/trigger/whatsapp-trigger';
+import { conditionNode } from './nodes/logic/condition';
+import { switchNode } from './nodes/logic/switch';
+import { setVariableNode } from './nodes/logic/set-variable';
 import { transformNode } from './nodes/data/transform';
 import { respondNode } from './nodes/communication/respond';
 import type { NodeExecutionContext, NodeLogger } from './contract';
@@ -98,5 +103,113 @@ describe('communication.respond', () => {
     const config = respondNode.configSchema.parse({ message: 'Listo' });
     const result = await respondNode.execute(contextWith(config, {}));
     expect(result).toEqual({ output: { message: 'Listo' } });
+  });
+});
+
+describe('logic.condition', () => {
+  const run = async (config: unknown, input: unknown = { paso: 1 }) => {
+    const parsed = conditionNode.configSchema.parse(config);
+    return conditionNode.execute(contextWith(parsed, input));
+  };
+
+  it('contains → true', async () => {
+    expect(await run({ left: 'Quiero un turno', operator: 'contains', right: 'turno' })).toEqual({
+      outputsByPort: { true: { paso: 1 } },
+    });
+  });
+
+  it('contains → false (no distingue mayúsculas)', async () => {
+    expect(await run({ left: 'Cuánto sale', operator: 'contains', right: 'TURNO' })).toEqual({
+      outputsByPort: { false: { paso: 1 } },
+    });
+  });
+
+  it('equals numérico', async () => {
+    expect(await run({ left: '42', operator: 'equals', right: '42.0' })).toEqual({
+      outputsByPort: { true: { paso: 1 } },
+    });
+  });
+
+  it('exists / notExists', async () => {
+    expect(await run({ left: '', operator: 'exists', right: '' })).toEqual({
+      outputsByPort: { false: { paso: 1 } },
+    });
+    expect(await run({ left: 'undefined', operator: 'notExists', right: '' })).toEqual({
+      outputsByPort: { true: { paso: 1 } },
+    });
+  });
+
+  it('greaterThan / lessThan', async () => {
+    expect(await run({ left: '10', operator: 'greaterThan', right: '5' })).toEqual({
+      outputsByPort: { true: { paso: 1 } },
+    });
+    expect(await run({ left: '10', operator: 'lessThan', right: '5' })).toEqual({
+      outputsByPort: { false: { paso: 1 } },
+    });
+  });
+});
+
+describe('logic.switch', () => {
+  it('enruta por el caso coincidente', async () => {
+    const config = switchNode.configSchema.parse({ value: 'ventas', case1: 'soporte', case2: 'Ventas' });
+    expect(await switchNode.execute(contextWith(config, { x: 1 }))).toEqual({
+      outputsByPort: { case2: { x: 1 } },
+    });
+  });
+
+  it('sale por default si nada coincide', async () => {
+    const config = switchNode.configSchema.parse({ value: 'otro', case1: 'a', case2: 'b', case3: '' });
+    expect(await switchNode.execute(contextWith(config, { x: 1 }))).toEqual({
+      outputsByPort: { default: { x: 1 } },
+    });
+  });
+});
+
+describe('logic.set-variable', () => {
+  it('declara variables y deja pasar la entrada', async () => {
+    const config = setVariableNode.configSchema.parse({
+      assignments: [{ key: 'empresa', value: 'Dermafisherton' }],
+    });
+    expect(await setVariableNode.execute(contextWith(config, { in: true }))).toEqual({
+      output: { in: true },
+      variables: { empresa: 'Dermafisherton' },
+    });
+  });
+
+  it('rechaza claves inválidas', () => {
+    expect(
+      setVariableNode.configSchema.safeParse({ assignments: [{ key: '1 mal', value: 'x' }] }).success,
+    ).toBe(false);
+  });
+});
+
+describe('trigger.whatsapp-message', () => {
+  it('normaliza un mensaje real del simulador', async () => {
+    const config = whatsappTriggerNode.configSchema.parse({});
+    const result = await whatsappTriggerNode.execute(
+      contextWith(config, { text: 'Hola', phone: '549341', name: 'Nico' }),
+    );
+    expect('output' in result && result.output).toMatchObject({
+      text: 'Hola',
+      phone: '549341',
+      name: 'Nico',
+      channel: 'whatsapp',
+      messageType: 'text',
+    });
+  });
+
+  it('usa los valores de ejemplo cuando no hay input', async () => {
+    const config = whatsappTriggerNode.configSchema.parse({ sampleText: 'demo' });
+    const result = await whatsappTriggerNode.execute(contextWith(config, undefined));
+    expect('output' in result && result.output).toMatchObject({ text: 'demo', channel: 'whatsapp' });
+  });
+});
+
+describe('trigger.webhook', () => {
+  it('devuelve el payload recibido', async () => {
+    const config = webhookTriggerNode.configSchema.parse({});
+    expect(await webhookTriggerNode.execute(contextWith(config, { pedido: 7 }))).toEqual({
+      output: { pedido: 7 },
+    });
   });
 });

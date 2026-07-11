@@ -189,9 +189,12 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
   });
 
   // 1. Validación estructural (los errores bloquean; los warnings no)
-  const issues = validateGraphStructure(options.graph, (type) => {
-    return options.resolveDefinition(type)?.category === 'trigger';
-  });
+  const isTriggerDef = (type: string): boolean => {
+    const definition = options.resolveDefinition(type);
+    if (!definition) return false;
+    return definition.category === 'trigger' || definition.inputs.length === 0;
+  };
+  const issues = validateGraphStructure(options.graph, isTriggerDef);
   const structureErrors = issues.filter((issue) => issue.level === 'error');
   if (structureErrors.length > 0) {
     return fail({
@@ -214,7 +217,7 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
     edgesBySource.set(edge.source, list);
   }
 
-  const trigger = activeNodes.find((node) => options.resolveDefinition(node.type)?.category === 'trigger');
+  const trigger = activeNodes.find((node) => isTriggerDef(node.type));
   if (!trigger) {
     return fail({ code: 'NO_TRIGGER', message: 'El flujo no tiene disparador activo.', retryable: false });
   }
@@ -328,7 +331,11 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
 
     // Ejecutar con reintentos + timeout
     let lastError: WorkflowError | null = null;
-    let result: { output?: unknown; outputsByPort?: Record<string, unknown> } | null = null;
+    let result: {
+      output?: unknown;
+      outputsByPort?: Record<string, unknown>;
+      variables?: Record<string, unknown>;
+    } | null = null;
     const maxAttempts = policy.strategy === 'retry' ? policy.retries + 1 : 1;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -471,6 +478,10 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
     const outputsByPort = result && 'outputsByPort' in result && result.outputsByPort ? result.outputsByPort : null;
     const output = outputsByPort ?? (result ? result.output : undefined);
     context.nodeOutputs[nodeId] = output;
+    // Variables declaradas por el nodo (p.ej. "Establecer variable")
+    if (result?.variables) {
+      Object.assign(context.variables, result.variables);
+    }
     // {{trigger.*}} expone la salida normalizada del disparador
     if (definition.category === 'trigger' && output && typeof output === 'object' && !Array.isArray(output)) {
       context.trigger = output as Record<string, unknown>;

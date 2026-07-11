@@ -155,6 +155,8 @@ model Workflow {
   description String?
   /// true para el flujo principal del proyecto
   isMain      Boolean  @default(false)
+  /// Token público no adivinable para POST /hooks/:token
+  webhookToken String  @unique @default(cuid())
   /// Borrador vivo: grafo validado por workflowGraphSchema (Zod) al guardar
   draftGraph  Json
   createdAt   DateTime @default(now())

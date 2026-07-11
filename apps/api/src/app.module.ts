@@ -16,6 +16,7 @@ import { WorkflowsService } from './workflows/workflows.service';
 import { NodeTypesController } from './workflows/node-types.controller';
 import { ExecutionsController } from './executions/executions.controller';
 import { ExecutionsService } from './executions/executions.service';
+import { HooksController } from './webhooks/hooks.controller';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -30,6 +31,7 @@ import { HealthController } from './health/health.controller';
     WorkflowsController,
     NodeTypesController,
     ExecutionsController,
+    HooksController,
     HealthController,
   ],
   providers: [

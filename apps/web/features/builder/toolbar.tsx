@@ -8,6 +8,7 @@ import {
   CircleAlert,
   ExternalLink,
   Loader2,
+  MessageCircle,
   Play,
   Redo2,
   ShieldCheck,
@@ -43,6 +44,8 @@ export function BuilderToolbar({
   onSaveNow,
   onRun,
   onAddNote,
+  onToggleSimulator,
+  simulatorOpen,
   validating,
   running,
 }: {
@@ -51,6 +54,8 @@ export function BuilderToolbar({
   onSaveNow: () => void;
   onRun: () => void;
   onAddNote: () => void;
+  onToggleSimulator: () => void;
+  simulatorOpen: boolean;
   validating: boolean;
   running: boolean;
 }) {
@@ -210,6 +215,15 @@ export function BuilderToolbar({
 
         <Button variant="secondary" size="sm" onClick={onValidate} loading={validating}>
           <ShieldCheck /> Validar
+        </Button>
+
+        <Button
+          variant={simulatorOpen ? 'primary' : 'secondary'}
+          size="sm"
+          onClick={onToggleSimulator}
+          aria-pressed={simulatorOpen}
+        >
+          <MessageCircle /> Simulador
         </Button>
 
         <Button variant="primary" size="sm" onClick={onRun} loading={running}>

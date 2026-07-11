@@ -9,47 +9,90 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+/**
+ * Flujo demo del brief:
+ * Mensaje de WhatsApp → Establecer variable (empresa) → ¿Pide turno?
+ *   Sí → Respuesta de turnos · No → Respuesta general
+ * Probar con el Simulador: "Hola, quiero un turno" / "¿Cuánto sale?" / "asdfgh"
+ */
 const DEMO_GRAPH = {
   nodes: [
     {
-      id: 'node_trigger',
-      type: 'trigger.manual',
+      id: 'node_wa_in',
+      type: 'trigger.whatsapp-message',
       nodeVersion: 1,
-      name: 'Inicio manual',
-      position: { x: 0, y: 120 },
-      config: { samplePayloadJson: '{\n  "text": "Hola, quiero un turno"\n}' },
-      disabled: false,
-      notes: '',
-    },
-    {
-      id: 'node_transform',
-      type: 'data.transform',
-      nodeVersion: 1,
-      name: 'Normalizar mensaje',
-      position: { x: 320, y: 120 },
+      name: 'Mensaje de WhatsApp',
+      position: { x: 0, y: 160 },
       config: {
-        assignments: [{ key: 'greeting', value: 'Hola {{trigger.text}}' }],
-        keepInput: true,
+        sampleText: 'Hola, quiero un turno',
+        samplePhone: '5493410000000',
+        sampleName: 'Cliente de prueba',
       },
       disabled: false,
       notes: '',
     },
     {
-      id: 'node_respond',
+      id: 'node_vars',
+      type: 'logic.set-variable',
+      nodeVersion: 1,
+      name: 'Datos del negocio',
+      position: { x: 300, y: 160 },
+      config: { assignments: [{ key: 'empresa', value: 'Dermafisherton' }] },
+      disabled: false,
+      notes: '',
+    },
+    {
+      id: 'node_intent',
+      type: 'logic.condition',
+      nodeVersion: 1,
+      name: '¿Pide turno?',
+      position: { x: 600, y: 160 },
+      config: { left: '{{trigger.text}}', operator: 'contains', right: 'turno' },
+      disabled: false,
+      notes: '',
+    },
+    {
+      id: 'node_resp_turno',
       type: 'communication.respond',
       nodeVersion: 1,
-      name: 'Respuesta',
-      position: { x: 640, y: 120 },
-      config: { message: '{{nodes.node_transform.output.greeting}}' },
+      name: 'Respuesta turnos',
+      position: { x: 920, y: 40 },
+      config: {
+        message:
+          '¡Hola {{trigger.name}}! 😊 Para reservar tu turno en {{variables.empresa}} decime qué día te queda cómodo.',
+      },
+      disabled: false,
+      notes: '',
+    },
+    {
+      id: 'node_resp_general',
+      type: 'communication.respond',
+      nodeVersion: 1,
+      name: 'Respuesta general',
+      position: { x: 920, y: 280 },
+      config: {
+        message:
+          'Hola {{trigger.name}}, gracias por escribir a {{variables.empresa}}. Contame en qué te puedo ayudar: turnos, precios u otra consulta.',
+      },
       disabled: false,
       notes: '',
     },
   ],
   edges: [
-    { id: 'edge_1', source: 'node_trigger', sourcePort: 'main', target: 'node_transform', targetPort: 'main' },
-    { id: 'edge_2', source: 'node_transform', sourcePort: 'main', target: 'node_respond', targetPort: 'main' },
+    { id: 'edge_1', source: 'node_wa_in', sourcePort: 'main', target: 'node_vars', targetPort: 'main' },
+    { id: 'edge_2', source: 'node_vars', sourcePort: 'main', target: 'node_intent', targetPort: 'main' },
+    { id: 'edge_3', source: 'node_intent', sourcePort: 'true', target: 'node_resp_turno', targetPort: 'main' },
+    { id: 'edge_4', source: 'node_intent', sourcePort: 'false', target: 'node_resp_general', targetPort: 'main' },
   ],
-  stickyNotes: [],
+  stickyNotes: [
+    {
+      id: 'note_demo',
+      position: { x: 300, y: -60 },
+      width: 240,
+      height: 120,
+      text: 'Demo: abrí el Simulador y escribí "quiero un turno" o "cuánto sale" para ver las dos ramas.',
+    },
+  ],
   groups: [],
 };
 
@@ -96,10 +139,17 @@ async function main() {
     });
   }
 
+  // El flujo demo se crea o ACTUALIZA al grafo de demostración vigente
+  // (es un proyecto de ejemplo; los proyectos reales nunca se tocan acá).
   const existingWorkflow = await prisma.workflow.findFirst({
     where: { projectId: project.id, isMain: true },
   });
-  if (!existingWorkflow) {
+  if (existingWorkflow) {
+    await prisma.workflow.update({
+      where: { id: existingWorkflow.id },
+      data: { draftGraph: DEMO_GRAPH },
+    });
+  } else {
     await prisma.workflow.create({
       data: {
         projectId: project.id,

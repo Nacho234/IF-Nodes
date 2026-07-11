@@ -19,6 +19,7 @@ import { FlowNode } from './flow-node';
 import { NoteNode } from './note-node';
 import { NodePalette, DND_MIME } from './palette';
 import { ConfigPanel } from './config-panel';
+import { SimulatorPanel } from './simulator-panel';
 import { BuilderToolbar } from './toolbar';
 import type { ExecutionDetail, NodeTypeInfo, SaveDraftResponse, WorkflowDetail } from '@/lib/types';
 
@@ -41,6 +42,7 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
   const [validating, setValidating] = useState(false);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedFor = useRef<string | null>(null);
@@ -92,38 +94,45 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
     };
   }, [revision, saveNow]);
 
-  const pollExecution = useCallback(async (executionId: string) => {
-    try {
+  /** Espera (polleando) a que la ejecución termine, actualizando el lienzo en vivo. */
+  const awaitExecution = useCallback(async (executionId: string): Promise<ExecutionDetail> => {
+    for (;;) {
       const execution = await api.get<ExecutionDetail>(`/executions/${executionId}`);
       useBuilderStore.getState().setActiveExecution(execution);
-      if (!TERMINAL_STATUSES.has(execution.status)) {
-        pollTimer.current = setTimeout(() => void pollExecution(executionId), RUN_POLL_MS);
-      } else {
-        setRunning(false);
-      }
-    } catch {
-      setRunning(false);
+      if (TERMINAL_STATUSES.has(execution.status)) return execution;
+      await new Promise((resolve) => {
+        pollTimer.current = setTimeout(resolve, RUN_POLL_MS);
+      });
     }
   }, []);
 
+  /** Guarda, ejecuta el flujo con el input dado y devuelve la ejecución terminal. */
+  const runWithInput = useCallback(
+    async (input: Record<string, unknown>): Promise<ExecutionDetail> => {
+      setRunError(null);
+      setRunning(true);
+      useBuilderStore.getState().setActiveExecution(null);
+      try {
+        const saved = await saveNow();
+        if (!saved) throw new ApiError(0, 'No se pudo guardar antes de ejecutar.');
+        const { executionId } = await api.post<{ executionId: string }>(`/workflows/${workflow.id}/run`, {
+          input,
+        });
+        return await awaitExecution(executionId);
+      } finally {
+        setRunning(false);
+      }
+    },
+    [saveNow, workflow.id, awaitExecution],
+  );
+
   const runFlow = useCallback(async () => {
-    setRunError(null);
-    setRunning(true);
-    useBuilderStore.getState().setActiveExecution(null);
-    const saved = await saveNow();
-    if (!saved) {
-      setRunning(false);
-      setRunError('No se pudo guardar antes de ejecutar.');
-      return;
-    }
     try {
-      const { executionId } = await api.post<{ executionId: string }>(`/workflows/${workflow.id}/run`, {});
-      void pollExecution(executionId);
+      await runWithInput({});
     } catch (error) {
-      setRunning(false);
       setRunError(error instanceof ApiError ? error.message : 'No se pudo iniciar la ejecución.');
     }
-  }, [saveNow, workflow.id, pollExecution]);
+  }, [runWithInput]);
 
   const validate = useCallback(async () => {
     setValidating(true);
@@ -207,6 +216,8 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
         onSaveNow={() => void saveNow()}
         onRun={() => void runFlow()}
         onAddNote={addNoteAtCenter}
+        onToggleSimulator={() => setSimulatorOpen((open) => !open)}
+        simulatorOpen={simulatorOpen}
         validating={validating}
         running={running}
       />
@@ -259,7 +270,11 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
             </div>
           ) : null}
         </div>
-        <ConfigPanel />
+        {simulatorOpen ? (
+          <SimulatorPanel onSend={runWithInput} onClose={() => setSimulatorOpen(false)} />
+        ) : (
+          <ConfigPanel webhookToken={workflow.webhookToken} />
+        )}
       </div>
     </div>
   );

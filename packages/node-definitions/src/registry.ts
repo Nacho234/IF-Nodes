@@ -1,5 +1,10 @@
 import type { NodeDefinition } from './contract';
 import { manualTriggerNode } from './nodes/trigger/manual-trigger';
+import { webhookTriggerNode } from './nodes/trigger/webhook-trigger';
+import { whatsappTriggerNode } from './nodes/trigger/whatsapp-trigger';
+import { conditionNode } from './nodes/logic/condition';
+import { switchNode } from './nodes/logic/switch';
+import { setVariableNode } from './nodes/logic/set-variable';
 import { transformNode } from './nodes/data/transform';
 import { respondNode } from './nodes/communication/respond';
 
@@ -10,7 +15,16 @@ import { respondNode } from './nodes/communication/respond';
  */
 // Los genéricos concretos de cada nodo se borran al registrarlos: el
 // registro trabaja con la forma común NodeDefinition<unknown, unknown, unknown>.
-const definitions = [manualTriggerNode, transformNode, respondNode] as unknown as NodeDefinition[];
+const definitions = [
+  manualTriggerNode,
+  webhookTriggerNode,
+  whatsappTriggerNode,
+  conditionNode,
+  switchNode,
+  setVariableNode,
+  transformNode,
+  respondNode,
+] as unknown as NodeDefinition[];
 
 const byTypeAndVersion = new Map<string, NodeDefinition>();
 for (const def of definitions) {
@@ -38,7 +52,10 @@ export const nodeRegistry = {
     return this.all().find((d) => d.type === type);
   },
 
+  /** Un disparador es todo nodo sin puertos de entrada (puede vivir en otra categoría, p.ej. whatsapp). */
   isTrigger(type: string): boolean {
-    return this.get(type)?.category === 'trigger';
+    const definition = this.get(type);
+    if (!definition) return false;
+    return definition.category === 'trigger' || definition.inputs.length === 0;
   },
 };

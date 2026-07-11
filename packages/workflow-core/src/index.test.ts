@@ -436,3 +436,40 @@ describe('executeWorkflow — límites y control', () => {
     expect(events).toEqual(['start:t', 'finish:t:SUCCEEDED', 'start:e', 'finish:e:SUCCEEDED']);
   });
 });
+
+describe('executeWorkflow — variables', () => {
+  const setVar = defineNode<{ key: string; value: string }, unknown, unknown>({
+    type: 'test.setvar',
+    version: 1,
+    category: 'logic',
+    displayName: 'SetVar',
+    description: '',
+    icon: 'braces',
+    configSchema: z.object({ key: z.string(), value: z.string() }),
+    defaultConfig: { key: '', value: '' },
+    uiHints: [],
+    inputs: [{ id: 'main', label: 'in' }],
+    outputs: [{ id: 'main', label: 'out' }],
+    exportable: true,
+    async execute({ config, input }) {
+      return { output: input, variables: { [config.key]: config.value } };
+    },
+  });
+  DEFS.set('test.setvar', setVar as unknown as NodeDefinition);
+
+  it('las variables declaradas quedan disponibles vía {{variables.*}}', async () => {
+    const result = await run(
+      graph(
+        [
+          node('t', 'test.trigger'),
+          node('v', 'test.setvar', { key: 'empresa', value: 'Dermafisherton' }),
+          node('e', 'test.echo', { text: 'Hola de {{variables.empresa}}' }),
+        ],
+        [edge('1', 't', 'v'), edge('2', 'v', 'e')],
+      ),
+    );
+    expect(result.status).toBe('SUCCEEDED');
+    expect(result.finalOutput).toEqual({ text: 'Hola de Dermafisherton' });
+    expect(result.context.variables).toEqual({ empresa: 'Dermafisherton' });
+  });
+});

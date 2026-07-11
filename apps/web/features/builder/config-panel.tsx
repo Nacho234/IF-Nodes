@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { CodeTextarea, Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/misc';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { isFlowNode, useBuilderStore } from './store';
 import { categoryColor, nodeIcon } from './node-visuals';
 import type { NodeTypeInfo } from '@/lib/types';
@@ -22,7 +23,7 @@ function JsonPreview({ value }: { value: unknown }) {
  * El formulario se genera desde los uiHints de la definición del nodo,
  * de modo que agregar un nodo nuevo no requiere tocar este componente.
  */
-export function ConfigPanel() {
+export function ConfigPanel({ webhookToken }: { webhookToken?: string }) {
   const selectedNodeId = useBuilderStore((state) => state.selectedNodeId);
   const node = useBuilderStore((state) => {
     const found = state.nodes.find((n) => n.id === state.selectedNodeId);
@@ -107,6 +108,32 @@ export function ConfigPanel() {
 
       {/* Configuración generada desde uiHints */}
       <div className="flex-1 space-y-4 p-4">
+        {/* URL pública del webhook (solo para el trigger de webhook) */}
+        {node.data.nodeType === 'trigger.webhook' && webhookToken ? (
+          <div className="space-y-1.5">
+            <Label>URL del webhook</Label>
+            <div className="flex items-center gap-1.5">
+              <code className="min-w-0 flex-1 truncate rounded-md border border-border bg-surface-sunken px-2 py-1.5 font-mono text-[10.5px]">
+                POST /api/hooks/{webhookToken}
+              </code>
+              <Button
+                variant="secondary"
+                size="icon-sm"
+                aria-label="Copiar URL del webhook"
+                title="Copiar URL completa"
+                onClick={() =>
+                  void navigator.clipboard.writeText(`${window.location.origin}/api/hooks/${webhookToken}`)
+                }
+              >
+                <Copy />
+              </Button>
+            </div>
+            <p className="text-[11px] leading-4 text-faint-foreground">
+              Responde 202 con el id de ejecución. El cuerpo JSON queda disponible como{' '}
+              <code className="font-mono">{'{{trigger.*}}'}</code>.
+            </p>
+          </div>
+        ) : null}
         {info.uiHints.map((hint) => {
           const raw = node.data.config[hint.field];
           const fieldId = `cfg-${node.id}-${hint.field}`;
@@ -143,6 +170,22 @@ export function ConfigPanel() {
                   placeholder={hint.placeholder}
                   onChange={(event) => setConfigValue(hint.field, event.target.value)}
                 />
+              ) : hint.widget === 'select' ? (
+                <Select
+                  value={String(raw ?? '')}
+                  onValueChange={(value) => setConfigValue(hint.field, value)}
+                >
+                  <SelectTrigger id={fieldId}>
+                    <SelectValue placeholder="Seleccionar…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(hint.options ?? []).map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               ) : hint.widget === 'number' ? (
                 <Input
                   id={fieldId}

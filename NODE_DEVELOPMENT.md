@@ -66,10 +66,17 @@ interface NodeDefinition<TConfig = unknown, TInput = unknown, TOutput = unknown>
 
 ## Nodos existentes
 
-| Tipo | Versión | Categoría | Exportable | Fase |
+| Tipo | Versión | Categoría | Exportable | Nota |
 |---|---|---|---|---|
-| `trigger.manual` | 1 | trigger | ✅ | 1–2 (demo) |
-| `data.transform` | 1 | data | ✅ | 1–2 (demo) |
-| `communication.respond` | 1 | communication | ✅ | 1–2 (demo) |
+| `trigger.manual` | 1 | trigger | ✅ | payload de ejemplo configurable |
+| `trigger.webhook` | 1 | trigger | ✅ | URL pública `POST /hooks/:token` |
+| `trigger.whatsapp-message` | 1 | whatsapp | ✅ | alimentado por el Simulador (mismo formato que el proveedor real) |
+| `logic.condition` | 1 | logic | ✅ | 8 operadores, salidas `true`/`false` |
+| `logic.switch` | 1 | logic | ✅ | 3 casos + `default` |
+| `logic.set-variable` | 1 | logic | ✅ | escribe en `{{variables.*}}` vía `result.variables` |
+| `data.transform` | 1 | data | ✅ | asignaciones con paths anidados |
+| `communication.respond` | 1 | communication | ✅ | respuesta final del flujo |
 
-El resto del set del MVP (webhook, condición, switch, variables, esperar, HTTP, IA, contactos, WhatsApp…) se implementa en Fases 3–7 siguiendo este mismo proceso.
+Nota: un nodo es **disparador** si no tiene puertos de entrada (`inputs: []`), sin importar su categoría visual (p.ej. el trigger de WhatsApp vive en la categoría `whatsapp`).
+
+El resto del set del MVP (esperar, HTTP con SSRF, IA, contactos, envío real de WhatsApp…) se implementa en Fases 4–7 siguiendo este mismo proceso.

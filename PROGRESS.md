@@ -2,7 +2,7 @@
 
 Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) · 🚧 en curso · ⬜ pendiente.
 
-Última actualización: 2026-07-10 (Fases 1 y 2 completas; núcleo de Fases 3 y 4 operativo y verificado E2E).
+Última actualización: 2026-07-10 (tercera tanda: nodos de lógica, triggers webhook/WhatsApp, simulador de conversación y webhook público — todo verificado E2E).
 
 ## Fase 1 — Fundaciones ✅
 
@@ -34,6 +34,22 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 - ✅ API `executions`: ejecutar borrador (valida antes de encolar), listar con filtros, detalle con pasos y logs, **reintentar**; 503 claro si Redis no está
 - ⬜ Nodo Esperar (delayed jobs) y ejecución desde un nodo → siguiente iteración
 
+## Fase 5 — Simulador ✅ (WhatsApp v1)
+
+- ✅ Panel de simulador en el constructor (botón en toolbar): chat cliente↔bot, nombre y teléfono configurables, reiniciar conversación, indicador "escribiendo", link a la ejecución de cada respuesta
+- ✅ Cada mensaje ejecuta el flujo real vía cola+worker y el recorrido se ilumina en el lienzo
+- ✅ Mismo formato interno que usará el proveedor real de WhatsApp (Fase 7): los nodos no distinguen simulado de real
+- ✅ Aviso honesto si el flujo no tiene trigger de WhatsApp activo
+- ⬜ Simular imagen/audio/ubicación/botones; memoria de conversación entre mensajes (requiere entidades de Conversación)
+
+## Nodos y webhooks (tercera tanda)
+
+- ✅ Nodos nuevos: `trigger.webhook`, `trigger.whatsapp-message`, `logic.condition` (8 operadores), `logic.switch` (3 casos + default), `logic.set-variable` (motor extendido con `result.variables`)
+- ✅ Endpoint público `POST /hooks/:token` (token único no adivinable por flujo, migración con backfill, rate limit propio, 404 genérico, redacción de payload)
+- ✅ URL del webhook visible con botón copiar al seleccionar el nodo en el builder
+- ✅ Widget `select` en el panel de configuración (faltaba)
+- ✅ Flujo demo del seed actualizado al del brief: WhatsApp → variable → ¿pide turno? → rama turnos / rama general (con nota adhesiva)
+
 ## Fase 4 — Debugging (parcial)
 
 - ✅ Botón **Ejecutar** en el constructor: nodos se iluminan en vivo (polling 700 ms), estado con icono+texto y duración por nodo
@@ -41,13 +57,17 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 - ✅ Detalle de ejecución: recorrido por nodo con entrada/salida/error/intentos/duración, disparador, salida final, logs, reintentar, link al constructor
 - ⬜ SSE en tiempo real (hoy: polling — decisión en PROJECT_PLAN §9.9), comparar ejecuciones, descargar diagnóstico
 
-## Verificaciones (2026-07-10, segunda tanda)
+## Verificaciones (2026-07-10, tercera tanda)
 
 | Verificación | Resultado |
 |---|---|
 | `npm run typecheck` (7 workspaces) | ✅ |
 | `npm run lint` (7 workspaces) | ✅ 0 errores, 0 warnings |
-| Tests unitarios: shared 10 · node-definitions 10 · expression-engine 15 · workflow-core 19 | ✅ **54/54** |
+| Tests unitarios: shared 10 · node-definitions 22 · expression-engine 15 · workflow-core 20 | ✅ **67/67** |
+| E2E rama "turno": WhatsApp sim → variable → condición true → respuesta personalizada con `{{trigger.name}}` y `{{variables.empresa}}` | ✅ |
+| E2E rama "general": condición false → respuesta general | ✅ |
+| E2E webhook público: `POST /hooks/:token` → 202 → worker → SUCCEEDED; token inválido → 404 | ✅ |
+| Migración `workflow_webhook_token` con backfill sobre datos existentes | ✅ |
 | Builds de producción (packages, api, worker, web) | ✅ |
 | Migración `init` + seed sobre Postgres real | ✅ |
 | E2E por API: dev-login → cookie → listar proyectos → **ejecutar flujo demo** → worker lo procesa → 3 pasos SUCCEEDED con input/output correctos → salida final `{"message":"Hola Hola, quiero un turno"}` | ✅ |
@@ -56,6 +76,9 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 
 ## Problemas encontrados y resueltos
 
+- **Trigger por categoría**: `isTrigger` solo reconocía la categoría `trigger`, y el nodo de WhatsApp vive en la categoría `whatsapp` → el flujo demo fallaba con NO_TRIGGER. Semántica corregida: disparador = nodo sin puertos de entrada (registry + motor alineados).
+- **Procesos zombis**: quedaron 5 `node dist/main.js` acumulados de reinicios anteriores (workers viejos consumían la cola con código desactualizado). Limpiados; el patrón de kill ahora matchea el comando real.
+- **Migración con backfill**: agregar `webhookToken NOT NULL` sobre filas existentes requirió migración manual (ADD NULL → UPDATE → SET NOT NULL → UNIQUE), y el timestamp del folder debe ser UTC posterior al de `init` (la shadow DB aplica en orden de nombre).
 - **Bug real detectado en E2E**: el trigger manual devolvía el input vacío `{}` en lugar del payload de ejemplo, y `{{trigger.*}}` apuntaba al dato crudo en vez de a la salida del trigger. Corregidos ambos (nodo y motor) y re-verificado E2E.
 - Timeout global del motor: no interrumpía un nodo en curso; ahora el timeout de cada nodo se acota al presupuesto global restante (test lo cubre).
 - Tipos BullMQ/ioredis: se pasa configuración plana (`redisConnectionFromUrl`) en vez de instancias, evitando choques de versión.
