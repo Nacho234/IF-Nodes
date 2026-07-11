@@ -383,6 +383,10 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
     },
 
     setSelected(nodeId) {
+      // Guardar contra re-setear el mismo valor: React Flow dispara
+      // onSelectionChange en cada medición de nodos y un set idéntico
+      // igual notifica a los suscriptores → bucle de renders.
+      if (get().selectedNodeId === nodeId) return;
       set({ selectedNodeId: nodeId });
     },
 

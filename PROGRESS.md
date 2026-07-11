@@ -2,7 +2,14 @@
 
 Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) · 🚧 en curso · ⬜ pendiente.
 
-Última actualización: 2026-07-11 (séptima tanda: **Fase 9 — exportador de runtime**. Verificado E2E — corre standalone).
+Última actualización: 2026-07-11 (octava tanda: **Fase 10** — variables por entorno + tests E2E Playwright, que cazaron un bug crítico del constructor).
+
+## Fase 10 — Calidad (en curso)
+
+- ✅ Variables por entorno: API (crear/editar/borrar, secretas cifradas AES-GCM), worker descifra para `{{environment.X}}`, UI por proyecto con pestañas Dev/Testing/Prod — verificado E2E (plana + secreta resueltas)
+- ✅ **Tests E2E con Playwright** (`apps/web/e2e/`, 7 tests): login autorizado + rechazo, inicio, crear cliente, abrir constructor (canvas con nodos), credenciales/exportaciones. Setup con sesión reusada para no agotar el rate-limit. `npm run test:e2e -w @ifnodes/web` (requiere el stack corriendo + seed)
+- ✅ **Bug crítico corregido (lo cazó el E2E)**: el constructor entraba en bucle infinito de renders y crasheaba con "Maximum update depth exceeded" — nunca se había renderizado en un navegador real (se ejecutaba por API). Causa: `onSelectionChange` de React Flow llamaba `setSelected` repetidamente y el set idéntico igual notificaba a Zustand; y un selector devolvía un array nuevo por render. Corregidos ambos (guarda de igualdad en `setSelected` + seleccionar array estable y filtrar en render)
+- ⬜ SSE en vivo (hoy polling), nodos de envío real WhatsApp/SMTP, accesibilidad (pasada con axe), reportes de consumo
 
 ## Fase 1 — Fundaciones ✅
 

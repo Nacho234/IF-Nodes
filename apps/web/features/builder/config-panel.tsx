@@ -89,9 +89,10 @@ export function ConfigPanel({ webhookToken }: { webhookToken?: string }) {
     }
     return undefined;
   });
-  const configIssues = useBuilderStore((state) =>
-    state.configIssues.filter((issue) => issue.nodeId === selectedNodeId),
-  );
+  // Seleccionar el array estable y filtrar en el render: un selector que
+  // devuelve un array nuevo en cada llamada rompe useSyncExternalStore (loop).
+  const allConfigIssues = useBuilderStore((state) => state.configIssues);
+  const configIssues = allConfigIssues.filter((issue) => issue.nodeId === selectedNodeId);
   const updateNodeData = useBuilderStore((state) => state.updateNodeData);
   const duplicateNode = useBuilderStore((state) => state.duplicateNode);
   const removeNode = useBuilderStore((state) => state.removeNode);
