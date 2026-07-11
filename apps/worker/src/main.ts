@@ -20,6 +20,7 @@ import {
   type ExecutionJobData,
 } from '@ifnodes/shared';
 import { executeWorkflow, type StepRecord } from '@ifnodes/workflow-core';
+import { decryptSecret } from '@ifnodes/shared/dist/crypto';
 import { buildServices } from './services';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -64,7 +65,15 @@ async function processExecution(job: Job<ExecutionJobData>): Promise<void> {
   });
   const environment: Record<string, unknown> = {};
   for (const variable of environmentRow?.variables ?? []) {
-    if (!variable.secret && variable.value !== null) environment[variable.key] = variable.value;
+    if (variable.secret && variable.encryptedValue) {
+      try {
+        environment[variable.key] = decryptSecret(variable.encryptedValue);
+      } catch {
+        // Variable secreta ilegible (clave rotada): se omite
+      }
+    } else if (variable.value !== null) {
+      environment[variable.key] = variable.value;
+    }
   }
 
   await prisma.execution.update({

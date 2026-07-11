@@ -25,6 +25,8 @@ import { VersionsController } from './versions/versions.controller';
 import { VersionsService } from './versions/versions.service';
 import { ExportsController } from './exports/exports.controller';
 import { ExportsService } from './exports/exports.service';
+import { EnvironmentsController } from './environments/environments.controller';
+import { EnvironmentsService } from './environments/environments.service';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -44,6 +46,7 @@ import { HealthController } from './health/health.controller';
     CredentialsController,
     VersionsController,
     ExportsController,
+    EnvironmentsController,
     HealthController,
   ],
   providers: [
@@ -61,6 +64,7 @@ import { HealthController } from './health/health.controller';
     CredentialsService,
     VersionsService,
     ExportsService,
+    EnvironmentsService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowRight, FlaskConical, GitBranch, ListChecks, Workflow } from 'lucide-react';
+import { ArrowRight, FlaskConical, GitBranch, KeyRound, ListChecks, Workflow } from 'lucide-react';
 import { PROJECT_TYPE_LABELS } from '@ifnodes/shared';
 import { PageHeader } from '@/components/shell/page-header';
 import { ProjectStatusBadge } from '@/components/status-badges';
@@ -14,8 +14,8 @@ import type { ProjectDetail } from '@/lib/types';
  * "planificadas" (texto informativo, sin botones muertos).
  */
 const UPCOMING_SECTIONS = [
-  { name: 'Variables por entorno', phase: 'próximamente' },
-  { name: 'Exportar runtime', phase: 'próximamente' },
+  { name: 'Nodos de envío real (WhatsApp / SMTP)', phase: 'próximamente' },
+  { name: 'Reportes de consumo y costos', phase: 'próximamente' },
 ];
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -131,6 +131,19 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 <span className="block text-xs text-faint-foreground">
                   {project._count.executions} registradas
                 </span>
+              </span>
+            </span>
+            <ArrowRight className="size-4 text-faint-foreground" />
+          </Link>
+          <Link
+            href={`/projects/${project.id}/variables`}
+            className="flex items-center justify-between rounded-lg border border-border bg-surface px-5 py-4 transition-colors hover:bg-surface-sunken/60"
+          >
+            <span className="flex items-center gap-3">
+              <KeyRound className="size-4 text-muted-foreground" />
+              <span>
+                <span className="block text-sm font-medium">Variables por entorno</span>
+                <span className="block text-xs text-faint-foreground">Dev · Testing · Production</span>
               </span>
             </span>
             <ArrowRight className="size-4 text-faint-foreground" />

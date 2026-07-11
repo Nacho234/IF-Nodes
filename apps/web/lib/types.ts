@@ -129,6 +129,22 @@ export interface SaveDraftResponse {
   configIssues: NodeConfigIssueDto[];
 }
 
+/* ── Variables por entorno ─────────────────────────────────── */
+
+export interface EnvVarView {
+  id: string;
+  key: string;
+  secret: boolean;
+  value: string;
+  masked: boolean;
+}
+
+export interface EnvironmentView {
+  id: string;
+  kind: string;
+  variables: EnvVarView[];
+}
+
 /* ── Exportaciones ─────────────────────────────────────────── */
 
 export interface ExportResult {
