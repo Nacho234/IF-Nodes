@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma, User } from '@ifnodes/database';
 import type { ClientStatus, CreateClientInput, UpdateClientInput } from '@ifnodes/shared';
 import { PrismaService } from '../common/prisma.service';
@@ -94,25 +94,26 @@ export class ClientsService {
     return client;
   }
 
-  /** Elimina un cliente vacío. Si tiene proyectos, pide borrarlos primero. */
+  /** Elimina el cliente y, en cascada, todos sus proyectos y lo que cuelga de ellos. */
   async remove(id: string, user: User) {
     const client = await this.prisma.client.client.findUnique({
       where: { id },
       select: { id: true, name: true, _count: { select: { projects: true } } },
     });
     if (!client) throw new NotFoundException('Cliente no encontrado.');
-    if (client._count.projects > 0) {
-      throw new BadRequestException(
-        `El cliente tiene ${client._count.projects} proyecto(s). Eliminalos o movelos antes de borrar el cliente.`,
-      );
-    }
-    await this.prisma.client.client.delete({ where: { id } });
+
+    // Client→Project es Restrict en la DB: borramos los proyectos primero
+    // (eso cascadea flujos, ejecuciones, casos, versiones, exports, entornos).
+    await this.prisma.client.$transaction([
+      this.prisma.client.project.deleteMany({ where: { clientId: id } }),
+      this.prisma.client.client.delete({ where: { id } }),
+    ]);
     await this.audit.log({
       userId: user.id,
       action: 'client.deleted',
       entityType: 'client',
       entityId: id,
-      detail: { name: client.name },
+      detail: { name: client.name, projectsDeleted: client._count.projects },
     });
     return { ok: true };
   }

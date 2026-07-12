@@ -218,8 +218,15 @@ export default function ClientsPage() {
         title="Eliminar cliente"
         description={
           <>
-            Vas a eliminar <strong>{deleting?.name}</strong>. Si tiene proyectos, primero hay que eliminarlos.
-            Esta acción no se puede deshacer.
+            Vas a eliminar <strong>{deleting?.name}</strong>
+            {deleting && deleting._count.projects > 0 ? (
+              <>
+                {' '}
+                y sus <strong>{deleting._count.projects} proyecto(s)</strong> con todos sus flujos, ejecuciones y
+                versiones
+              </>
+            ) : null}
+            . Esta acción no se puede deshacer.
           </>
         }
         onConfirm={async () => {
