@@ -7,7 +7,9 @@ Crear proyecto → Diseñar flujo → Integraciones → Simular → Depurar
 → Versión estable → Exportar runtime → GitHub → Railway / VPS
 ```
 
-Documentación: [PROJECT_PLAN](PROJECT_PLAN.md) · [ARCHITECTURE](ARCHITECTURE.md) · [WORKFLOW_ENGINE](WORKFLOW_ENGINE.md) · [NODE_DEVELOPMENT](NODE_DEVELOPMENT.md) · [EXPORT_RUNTIME](EXPORT_RUNTIME.md) · [SECURITY](SECURITY.md) · [PROGRESS](PROGRESS.md)
+**Empezá acá:** [HANDOFF](HANDOFF.md) (estado y fases) · [USER_GUIDE](USER_GUIDE.md) (cómo se usa)
+
+Técnica: [PROJECT_PLAN](PROJECT_PLAN.md) · [ARCHITECTURE](ARCHITECTURE.md) · [WORKFLOW_ENGINE](WORKFLOW_ENGINE.md) · [NODE_DEVELOPMENT](NODE_DEVELOPMENT.md) · [EXPORT_RUNTIME](EXPORT_RUNTIME.md) · [SECURITY](SECURITY.md) · [PROGRESS](PROGRESS.md)
 
 ## Stack
 
