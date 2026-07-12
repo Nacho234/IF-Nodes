@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, Building2, MoreHorizontal, Pencil, Plus, Search } from 'lucide-react';
+import { Archive, Building2, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { CLIENT_STATUSES, CLIENT_STATUS_LABELS, type ClientStatus } from '@ifnodes/shared';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
@@ -19,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ClientFormDialog } from '@/features/clients/client-form-dialog';
 import type { ClientRow } from '@/lib/types';
 
@@ -30,6 +31,7 @@ export default function ClientsPage() {
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ClientRow | undefined>(undefined);
+  const [deleting, setDeleting] = useState<ClientRow | undefined>(undefined);
 
   const clients = useQuery({
     queryKey: ['clients'],
@@ -188,13 +190,16 @@ export default function ClientsPage() {
                           <Pencil /> Editar
                         </DropdownMenuItem>
                         {client.status !== 'ARCHIVED' ? (
-                          <DropdownMenuItem
-                            className="text-danger data-[highlighted]:bg-danger-soft"
-                            onSelect={() => archive.mutate(client)}
-                          >
+                          <DropdownMenuItem onSelect={() => archive.mutate(client)}>
                             <Archive /> Archivar
                           </DropdownMenuItem>
                         ) : null}
+                        <DropdownMenuItem
+                          className="text-danger data-[highlighted]:bg-danger-soft"
+                          onSelect={() => setDeleting(client)}
+                        >
+                          <Trash2 /> Eliminar
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -206,6 +211,23 @@ export default function ClientsPage() {
       </div>
 
       <ClientFormDialog open={dialogOpen} onOpenChange={setDialogOpen} client={editing} />
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        onOpenChange={(open) => !open && setDeleting(undefined)}
+        title="Eliminar cliente"
+        description={
+          <>
+            Vas a eliminar <strong>{deleting?.name}</strong>. Si tiene proyectos, primero hay que eliminarlos.
+            Esta acción no se puede deshacer.
+          </>
+        }
+        onConfirm={async () => {
+          if (!deleting) return;
+          await api.delete(`/clients/${deleting.id}`);
+          await queryClient.invalidateQueries({ queryKey: ['clients'] });
+        }}
+      />
     </>
   );
 }

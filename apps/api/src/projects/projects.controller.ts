@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import {
   PROJECT_STATUSES,
   createProjectSchema,
@@ -52,5 +52,11 @@ export class ProjectsController {
     @Req() request: AuthenticatedRequest,
   ) {
     return this.projects.update(id, body, request.user);
+  }
+
+  @Delete(':id')
+  @RequirePermission('projects.write')
+  remove(@Param('id') id: string, @Req() request: AuthenticatedRequest) {
+    return this.projects.remove(id, request.user);
   }
 }

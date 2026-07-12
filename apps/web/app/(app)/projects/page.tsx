@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { FolderKanban, Plus, Search } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Archive, FolderKanban, MoreHorizontal, Plus, Search, Trash2 } from 'lucide-react';
 import { PROJECT_STATUSES, PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@ifnodes/shared';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
@@ -14,20 +14,35 @@ import { Input } from '@/components/ui/input';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/misc';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ProjectFormDialog } from '@/features/projects/project-form-dialog';
 import type { ProjectRow } from '@/lib/types';
 
 const ALL = '__all__';
 
 export default function ProjectsPage() {
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState<ProjectRow | undefined>(undefined);
 
   const projects = useQuery({
     queryKey: ['projects'],
     queryFn: () => api.get<ProjectRow[]>('/projects?includeArchived=true'),
   });
+
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ['projects'] });
+  const archive = async (project: ProjectRow) => {
+    await api.patch(`/projects/${project.id}`, { status: 'ARCHIVED' });
+    refresh();
+  };
 
   const filtered = useMemo(() => {
     const list = projects.data ?? [];
@@ -117,6 +132,7 @@ export default function ProjectsPage() {
                 <TableHead className="text-right">Flujos</TableHead>
                 <TableHead>Responsable</TableHead>
                 <TableHead className="text-right">Actualizado</TableHead>
+                <TableHead className="w-10" aria-label="Acciones" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -137,6 +153,28 @@ export default function ProjectsPage() {
                   <TableCell className="text-right font-mono text-xs text-faint-foreground tabular-nums">
                     {timeAgo(project.updatedAt)}
                   </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon-sm" aria-label={`Acciones para ${project.name}`}>
+                          <MoreHorizontal />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {project.status !== 'ARCHIVED' ? (
+                          <DropdownMenuItem onSelect={() => void archive(project)}>
+                            <Archive /> Archivar
+                          </DropdownMenuItem>
+                        ) : null}
+                        <DropdownMenuItem
+                          className="text-danger data-[highlighted]:bg-danger-soft"
+                          onSelect={() => setDeleting(project)}
+                        >
+                          <Trash2 /> Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -145,6 +183,23 @@ export default function ProjectsPage() {
       </div>
 
       <ProjectFormDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        onOpenChange={(open) => !open && setDeleting(undefined)}
+        title="Eliminar proyecto"
+        description={
+          <>
+            Vas a eliminar <strong>{deleting?.name}</strong> con todos sus flujos, ejecuciones, casos de prueba
+            y versiones. Esta acción no se puede deshacer.
+          </>
+        }
+        onConfirm={async () => {
+          if (!deleting) return;
+          await api.delete(`/projects/${deleting.id}`);
+          refresh();
+        }}
+      />
     </>
   );
 }

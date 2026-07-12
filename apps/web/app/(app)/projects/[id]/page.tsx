@@ -7,6 +7,7 @@ import { ProjectStatusBadge } from '@/components/status-badges';
 import { Badge } from '@/components/ui/badge';
 import { serverApiGet } from '@/lib/server-api';
 import { formatDateTime, timeAgo } from '@/lib/utils';
+import { DeleteProjectButton } from '@/features/projects/delete-project-button';
 import type { ProjectDetail } from '@/lib/types';
 
 /**
@@ -36,14 +37,17 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         title={project.name}
         description={project.description ?? PROJECT_TYPE_LABELS[project.type]}
         actions={
-          mainWorkflow ? (
-            <Link
-              href={`/projects/${project.id}/builder/${mainWorkflow.id}`}
-              className="inline-flex h-8.5 items-center gap-1.5 rounded-md bg-accent px-3.5 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
-            >
-              <Workflow className="size-4" /> Abrir constructor
-            </Link>
-          ) : undefined
+          <>
+            <DeleteProjectButton projectId={project.id} projectName={project.name} />
+            {mainWorkflow ? (
+              <Link
+                href={`/projects/${project.id}/builder/${mainWorkflow.id}`}
+                className="inline-flex h-8.5 items-center gap-1.5 rounded-md bg-accent px-3.5 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
+              >
+                <Workflow className="size-4" /> Abrir constructor
+              </Link>
+            ) : null}
+          </>
         }
       />
 

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma, User } from '@ifnodes/database';
 import type { ClientStatus, CreateClientInput, UpdateClientInput } from '@ifnodes/shared';
 import { PrismaService } from '../common/prisma.service';
@@ -92,6 +92,29 @@ export class ClientsService {
       detail: { fields: Object.keys(input) },
     });
     return client;
+  }
+
+  /** Elimina un cliente vacío. Si tiene proyectos, pide borrarlos primero. */
+  async remove(id: string, user: User) {
+    const client = await this.prisma.client.client.findUnique({
+      where: { id },
+      select: { id: true, name: true, _count: { select: { projects: true } } },
+    });
+    if (!client) throw new NotFoundException('Cliente no encontrado.');
+    if (client._count.projects > 0) {
+      throw new BadRequestException(
+        `El cliente tiene ${client._count.projects} proyecto(s). Eliminalos o movelos antes de borrar el cliente.`,
+      );
+    }
+    await this.prisma.client.client.delete({ where: { id } });
+    await this.audit.log({
+      userId: user.id,
+      action: 'client.deleted',
+      entityType: 'client',
+      entityId: id,
+      detail: { name: client.name },
+    });
+    return { ok: true };
   }
 
   private async ensureExists(id: string): Promise<void> {

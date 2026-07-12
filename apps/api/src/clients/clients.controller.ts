@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import {
   CLIENT_STATUSES,
   createClientSchema,
@@ -51,5 +51,11 @@ export class ClientsController {
     @Req() request: AuthenticatedRequest,
   ) {
     return this.clients.update(id, body, request.user);
+  }
+
+  @Delete(':id')
+  @RequirePermission('clients.write')
+  remove(@Param('id') id: string, @Req() request: AuthenticatedRequest) {
+    return this.clients.remove(id, request.user);
   }
 }

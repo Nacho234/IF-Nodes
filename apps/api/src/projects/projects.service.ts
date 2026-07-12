@@ -90,6 +90,24 @@ export class ProjectsService {
     return project;
   }
 
+  /** Elimina el proyecto y todo lo que cuelga de él (flujos, ejecuciones, casos, versiones…). */
+  async remove(id: string, user: User) {
+    const project = await this.prisma.client.project.findUnique({
+      where: { id },
+      select: { id: true, name: true, clientId: true },
+    });
+    if (!project) throw new NotFoundException('Proyecto no encontrado.');
+    await this.prisma.client.project.delete({ where: { id } });
+    await this.audit.log({
+      userId: user.id,
+      action: 'project.deleted',
+      entityType: 'project',
+      entityId: id,
+      detail: { name: project.name, clientId: project.clientId },
+    });
+    return { ok: true };
+  }
+
   async update(id: string, input: UpdateProjectInput, user: User) {
     const exists = await this.prisma.client.project.findUnique({ where: { id }, select: { id: true } });
     if (!exists) throw new NotFoundException('Proyecto no encontrado.');
