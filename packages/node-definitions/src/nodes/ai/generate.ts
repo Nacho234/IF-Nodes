@@ -34,7 +34,7 @@ export const aiGenerateNode = defineNode<Config, unknown, { text: string; model:
       credentialTypes: ['anthropic', 'openai', 'gemini'],
       helpText: 'Sin credencial, usa el proveedor de desarrollo (respuestas simuladas, sin costo).',
     },
-    { field: 'model', label: 'Modelo', widget: 'text', placeholder: 'claude-sonnet-4-5 / gpt-4o…' },
+    { field: 'model', label: 'Modelo', widget: 'text', placeholder: 'claude-sonnet-4-6 / gpt-4o…' },
     { field: 'system', label: 'Instrucciones (system)', widget: 'textarea', supportsExpressions: true },
     { field: 'prompt', label: 'Prompt', widget: 'textarea', supportsExpressions: true },
     { field: 'maxTokens', label: 'Máx. tokens', widget: 'number' },

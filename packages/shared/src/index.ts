@@ -2,6 +2,7 @@ export * from './brand';
 export * from './permissions';
 export * from './domain';
 export * from './workflow-graph';
+export * from './auto-layout';
 export * from './redact';
 export * from './queue';
 export * from './test-assertions';

@@ -16,10 +16,12 @@
     "@ifnodes/workflow-core": "*",
     "bullmq": "^5.52.0",
     "dotenv": "^16.5.0",
-    "ioredis": "^5.6.0"
+    "ioredis": "^5.6.0",
+    "nodemailer": "^9.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "@types/nodemailer": "^8.0.1",
     "eslint": "^9.28.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",

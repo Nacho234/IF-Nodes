@@ -20,10 +20,12 @@ import { NoteNode } from './note-node';
 import { NodePalette, DND_MIME } from './palette';
 import { ConfigPanel } from './config-panel';
 import { SimulatorPanel } from './simulator-panel';
+import { CopilotPanel } from './copilot-panel';
 import { BuilderToolbar } from './toolbar';
 import { TestCaseDialog } from '@/features/tests/test-case-dialog';
 import { VersionsDialog } from './versions-dialog';
 import { ExportDialog } from './export-dialog';
+import { ReadinessDialog } from './readiness-dialog';
 import type { ExecutionDetail, NodeTypeInfo, SaveDraftResponse, WorkflowDetail } from '@/lib/types';
 
 const AUTOSAVE_DELAY_MS = 1200;
@@ -46,9 +48,11 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [simulatorOpen, setSimulatorOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [readinessOpen, setReadinessOpen] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedFor = useRef<string | null>(null);
@@ -229,11 +233,21 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
         onSaveNow={() => void saveNow()}
         onRun={() => void runFlow()}
         onAddNote={addNoteAtCenter}
-        onToggleSimulator={() => setSimulatorOpen((open) => !open)}
+        onAutoLayout={() => useBuilderStore.getState().autoLayout()}
+        onToggleSimulator={() => {
+          setSimulatorOpen((open) => !open);
+          setCopilotOpen(false);
+        }}
+        onToggleCopilot={() => {
+          setCopilotOpen((open) => !open);
+          setSimulatorOpen(false);
+        }}
         onSaveTestCase={() => setTestCaseDialogOpen(true)}
         onOpenVersions={() => setVersionsOpen(true)}
         onOpenExport={() => setExportOpen(true)}
+        onOpenReadiness={() => setReadinessOpen(true)}
         simulatorOpen={simulatorOpen}
+        copilotOpen={copilotOpen}
         validating={validating}
         running={running}
       />
@@ -286,7 +300,9 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
             </div>
           ) : null}
         </div>
-        {simulatorOpen ? (
+        {copilotOpen ? (
+          <CopilotPanel workflowId={workflow.id} onClose={() => setCopilotOpen(false)} />
+        ) : simulatorOpen ? (
           <SimulatorPanel onSend={runWithInput} onClose={() => setSimulatorOpen(false)} />
         ) : (
           <ConfigPanel webhookToken={workflow.webhookToken} />
@@ -312,6 +328,8 @@ function BuilderInner({ workflow, catalog }: { workflow: WorkflowDetail; catalog
       />
 
       <ExportDialog open={exportOpen} onOpenChange={setExportOpen} workflowId={workflow.id} />
+
+      <ReadinessDialog open={readinessOpen} onOpenChange={setReadinessOpen} workflowId={workflow.id} />
     </div>
   );
 }

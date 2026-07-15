@@ -11,10 +11,13 @@ import {
   GitBranch,
   Loader2,
   MessageCircle,
+  Network,
   PackageOpen,
   Play,
   Redo2,
+  Rocket,
   ShieldCheck,
+  Sparkles,
   StickyNote,
   Undo2,
 } from 'lucide-react';
@@ -47,11 +50,15 @@ export function BuilderToolbar({
   onSaveNow,
   onRun,
   onAddNote,
+  onAutoLayout,
   onToggleSimulator,
+  onToggleCopilot,
   onSaveTestCase,
   onOpenVersions,
   onOpenExport,
+  onOpenReadiness,
   simulatorOpen,
+  copilotOpen,
   validating,
   running,
 }: {
@@ -60,11 +67,15 @@ export function BuilderToolbar({
   onSaveNow: () => void;
   onRun: () => void;
   onAddNote: () => void;
+  onAutoLayout: () => void;
   onToggleSimulator: () => void;
+  onToggleCopilot: () => void;
   onSaveTestCase: () => void;
   onOpenVersions: () => void;
   onOpenExport: () => void;
+  onOpenReadiness: () => void;
   simulatorOpen: boolean;
+  copilotOpen: boolean;
   validating: boolean;
   running: boolean;
 }) {
@@ -121,6 +132,11 @@ export function BuilderToolbar({
         <Tooltip content="Agregar nota al lienzo">
           <Button variant="ghost" size="icon-sm" aria-label="Agregar nota" onClick={onAddNote}>
             <StickyNote />
+          </Button>
+        </Tooltip>
+        <Tooltip content="Ordenar los nodos (auto-layout)">
+          <Button variant="ghost" size="icon-sm" aria-label="Ordenar nodos" onClick={onAutoLayout}>
+            <Network />
           </Button>
         </Tooltip>
       </div>
@@ -234,12 +250,25 @@ export function BuilderToolbar({
           <ShieldCheck /> Validar
         </Button>
 
+        <Button variant="secondary" size="sm" onClick={onOpenReadiness}>
+          <Rocket /> Puesta en marcha
+        </Button>
+
         <Button variant="secondary" size="sm" onClick={onOpenVersions}>
           <GitBranch /> Versiones
         </Button>
 
         <Button variant="secondary" size="sm" onClick={onOpenExport}>
           <PackageOpen /> Exportar
+        </Button>
+
+        <Button
+          variant={copilotOpen ? 'primary' : 'secondary'}
+          size="sm"
+          onClick={onToggleCopilot}
+          aria-pressed={copilotOpen}
+        >
+          <Sparkles /> Copilot
         </Button>
 
         <Button

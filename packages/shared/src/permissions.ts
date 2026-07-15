@@ -23,6 +23,7 @@ export const PERMISSIONS = [
   'versions.write',
   'exports.read',
   'exports.create',
+  'copilot.use',
   'users.manage',
   'audit.read',
 ] as const;
@@ -53,8 +54,9 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'credentials.write',
     'versions.write',
     'exports.create',
+    'copilot.use',
   ],
-  TESTER: [...READ_ONLY, 'executions.run', 'testcases.write'],
+  TESTER: [...READ_ONLY, 'executions.run', 'testcases.write', 'copilot.use'],
   VIEWER: READ_ONLY,
 };
 

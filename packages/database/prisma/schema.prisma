@@ -31,13 +31,14 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sessions       Session[]
-  clientsCreated Client[]    @relation("ClientCreatedBy")
-  projectsOwned  Project[]   @relation("ProjectOwner")
-  auditLogs      AuditLog[]
-  credentials    Credential[]
-  exports        Export[]
-  versions       WorkflowVersion[]
+  sessions        Session[]
+  clientsCreated  Client[]          @relation("ClientCreatedBy")
+  projectsOwned   Project[]         @relation("ProjectOwner")
+  auditLogs       AuditLog[]
+  credentials     Credential[]
+  exports         Export[]
+  versions        WorkflowVersion[]
+  copilotSessions CopilotSession[]
 
   @@index([email])
 }
@@ -116,28 +117,32 @@ enum ProjectStatus {
 }
 
 model Project {
-  id          String        @id @default(cuid())
-  clientId    String
-  client      Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  name        String
-  description String?       @db.Text
-  type        ProjectType
-  status      ProjectStatus @default(DRAFT)
+  id              String        @id @default(cuid())
+  clientId        String
+  client          Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  name            String
+  description     String?       @db.Text
+  type            ProjectType
+  status          ProjectStatus @default(DRAFT)
   /// Versión estable activa (si existe)
   activeVersionId String?
-  ownerId     String?
-  owner       User?         @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerId         String?
+  owner           User?         @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   /// Configuración de exportación (persistencia, proveedor, etc. — Fase 9)
-  exportConfig Json?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  exportConfig    Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  workflows    Workflow[]
-  executions   Execution[]
-  testCases    TestCase[]
-  environments Environment[]
-  credentials  Credential[]
-  exports      Export[]
+  workflows       Workflow[]
+  executions      Execution[]
+  testCases       TestCase[]
+  environments    Environment[]
+  credentials     Credential[]
+  exports         Export[]
+  copilotSessions CopilotSession[]
+  conversations   Conversation[]
+  contacts        Contact[]
+  knowledge       KnowledgeChunk[]
 
   @@index([clientId])
   @@index([status])
@@ -148,22 +153,23 @@ model Project {
 // ── Flujos y versiones ──────────────────────────────────────────
 
 model Workflow {
-  id          String   @id @default(cuid())
-  projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
   /// true para el flujo principal del proyecto
-  isMain      Boolean  @default(false)
+  isMain       Boolean  @default(false)
   /// Token público no adivinable para POST /hooks/:token
-  webhookToken String  @unique @default(cuid())
+  webhookToken String   @unique @default(cuid())
   /// Borrador vivo: grafo validado por workflowGraphSchema (Zod) al guardar
-  draftGraph  Json
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  draftGraph   Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  versions   WorkflowVersion[]
-  executions Execution[]
+  versions        WorkflowVersion[]
+  executions      Execution[]
+  copilotSessions CopilotSession[]
 
   @@index([projectId])
   @@index([projectId, isMain])
@@ -221,30 +227,31 @@ enum ExecutionSource {
   TEST_CASE
   WEBHOOK
   SCHEDULE
+  CAMPAIGN
 }
 
 model Execution {
-  id          String          @id @default(cuid())
-  projectId   String
-  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  workflowId  String
-  workflow    Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  id           String           @id @default(cuid())
+  projectId    String
+  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowId   String
+  workflow     Workflow         @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   /// null cuando se ejecuta el borrador desde el builder
-  versionId   String?
-  version     WorkflowVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
-  status      ExecutionStatus @default(QUEUED)
-  source      ExecutionSource
-  environment String          @default("DEVELOPMENT")
-  triggerType String
-  triggerData Json?
+  versionId    String?
+  version      WorkflowVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  status       ExecutionStatus  @default(QUEUED)
+  source       ExecutionSource
+  environment  String           @default("DEVELOPMENT")
+  triggerType  String
+  triggerData  Json?
   /// Contexto final serializado (redactado)
-  context     Json?
-  error       Json?
+  context      Json?
+  error        Json?
   failedNodeId String?
-  startedAt   DateTime?
-  finishedAt  DateTime?
-  durationMs  Int?
-  createdAt   DateTime        @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  durationMs   Int?
+  createdAt    DateTime         @default(now())
 
   steps ExecutionStep[]
   logs  ExecutionLog[]
@@ -301,24 +308,24 @@ model ExecutionLog {
 // ── Casos de prueba ─────────────────────────────────────────────
 
 model TestCase {
-  id          String   @id @default(cuid())
-  projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  workflowId  String?
-  name        String
-  description String?
-  triggerType String
-  input       Json
-  variables   Json?
+  id                  String    @id @default(cuid())
+  projectId           String
+  project             Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowId          String?
+  name                String
+  description         String?
+  triggerType         String
+  input               Json
+  variables           Json?
   /// Assertions tipadas (schema Zod en packages/shared — Fase 6)
-  assertions  Json     @default("[]")
+  assertions          Json      @default("[]")
   expectedFinalNodeId String?
   expectedStatus      String?
-  lastRunAt     DateTime?
-  lastRunStatus String?
-  lastRunDetail Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  lastRunAt           DateTime?
+  lastRunStatus       String?
+  lastRunDetail       Json?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([projectId])
   @@index([workflowId])
@@ -345,16 +352,16 @@ model Environment {
 }
 
 model EnvironmentVariable {
-  id            String      @id @default(cuid())
-  environmentId String
-  environment   Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
-  key           String
+  id             String      @id @default(cuid())
+  environmentId  String
+  environment    Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  key            String
   /// Valor plano solo si secret=false; si secret=true va cifrado en encryptedValue
-  value         String?
-  secret        Boolean     @default(false)
+  value          String?
+  secret         Boolean     @default(false)
   /// AES-256-GCM (iv:tag:cipher, hex) con CREDENTIALS_ENCRYPTION_KEY
   encryptedValue String?
-  updatedAt     DateTime    @updatedAt
+  updatedAt      DateTime    @updatedAt
 
   @@unique([environmentId, key])
 }
@@ -373,23 +380,23 @@ model Integration {
 }
 
 model Credential {
-  id             String       @id @default(cuid())
+  id             String          @id @default(cuid())
   name           String
   integrationId  String
-  integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  integration    Integration     @relation(fields: [integrationId], references: [id], onDelete: Restrict)
   projectId      String?
-  project        Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project        Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   environment    EnvironmentKind @default(DEVELOPMENT)
   /// Secreto AES-256-GCM; NUNCA se devuelve al frontend
   encryptedData  String
   /// Metadata no sensible para mostrar (p.ej. últimos 4 caracteres)
   maskedHint     String?
-  active         Boolean      @default(true)
+  active         Boolean         @default(true)
   lastVerifiedAt DateTime?
   createdById    String?
-  createdBy      User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdBy      User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([projectId])
   @@index([integrationId])
@@ -405,12 +412,13 @@ enum ExportStatus {
 }
 
 model Export {
-  id          String       @id @default(cuid())
+  id          String          @id @default(cuid())
   projectId   String
-  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  versionId   String
-  version     WorkflowVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
-  status      ExportStatus @default(PENDING)
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// Null en exports de proyecto completo (multi-flow, sin una versión única).
+  versionId   String?
+  version     WorkflowVersion? @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  status      ExportStatus    @default(PENDING)
   /// "zip" | "folder"
   format      String
   /// Manifest generado (sin secretos)
@@ -419,8 +427,8 @@ model Export {
   sizeBytes   Int?
   error       String?
   createdById String?
-  createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime     @default(now())
+  createdBy   User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now())
 
   @@index([projectId, createdAt])
 }
@@ -464,4 +472,138 @@ model UsageRecord {
 
   @@index([projectId, createdAt])
   @@index([executionId])
+}
+
+// ── IF Copilot ──────────────────────────────────────────────────
+// Asistente de IA del constructor. Fase 1: chat contextual de solo lectura,
+// una sesión por flujo. Fase 2 (base): puede PROPONER cambios (guardados como
+// JSON en el mensaje), que se muestran pero NO se aplican todavía.
+
+enum CopilotMessageRole {
+  USER
+  ASSISTANT
+}
+
+model CopilotSession {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  title      String   @default("Chat")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  messages CopilotMessage[]
+
+  @@index([workflowId, updatedAt])
+  @@index([projectId])
+}
+
+model CopilotMessage {
+  id            String             @id @default(cuid())
+  sessionId     String
+  session       CopilotSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role          CopilotMessageRole
+  content       String             @db.Text
+  /// Contexto redactado enviado al modelo (solo en el turno del usuario), para transparencia
+  contextSent   Json?
+  /// Propuesta de cambios validada (solo assistant): se muestra, no se aplica
+  proposal      Json?
+  provider      String?
+  model         String?
+  inputTokens   Int                @default(0)
+  outputTokens  Int                @default(0)
+  estimatedCost Float              @default(0)
+  stopReason    String?
+  error         String?
+  createdAt     DateTime           @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
+// ── Memoria de conversación ─────────────────────────────────────
+// Le da estado al agente entre mensajes: una Conversation por (proyecto, canal,
+// contacto), con su historial. El worker la escribe; el runtime exportado usa
+// una memoria en proceso (efímera).
+
+model Conversation {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// Canal: "whatsapp" | "email" | "web"
+  channel       String
+  /// Identificador del contacto en ese canal (teléfono, email…)
+  contact       String
+  /// "open" | "handoff" | "closed"
+  status        String   @default("open")
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  messages ConversationMessage[]
+
+  @@unique([projectId, channel, contact])
+  @@index([projectId, lastMessageAt])
+  @@index([status])
+}
+
+model ConversationMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  /// "user" | "assistant" | "system"
+  role           String
+  text           String       @db.Text
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// ── Contactos / CRM ─────────────────────────────────────────────
+// Personas con las que el agente interactúa, con estado en el tiempo. Base de
+// campañas, seguimiento y handoff. El worker la escribe; el runtime exportado
+// usa una versión en proceso (efímera).
+
+model Contact {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name            String?
+  phone           String?
+  email           String?
+  /// Etapa en el pipeline: "new" | "contacted" | "replied" | "meeting" | "closed" (libre)
+  status          String    @default("new")
+  tags            String[]  @default([])
+  notes           String?   @db.Text
+  /// Campos a medida
+  data            Json?
+  lastContactedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([projectId, phone])
+  @@unique([projectId, email])
+  @@index([projectId, status])
+  @@index([projectId, updatedAt])
+}
+
+// ── Base de conocimiento (RAG v1: keyword) ──────────────────────
+// Fragmentos de conocimiento por proyecto (FAQ, tono, políticas). El nodo de
+// búsqueda los recupera por palabras clave y los inyecta en el prompt del
+// agente. Upgrade futuro: embeddings/vector search.
+
+model KnowledgeChunk {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String?
+  content   String   @db.Text
+  tags      String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
 }

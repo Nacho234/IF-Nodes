@@ -10,7 +10,8 @@ import {
   type Node,
   type NodeChange,
 } from '@xyflow/react';
-import type { WorkflowGraph } from '@ifnodes/shared';
+import { autoLayout as computeAutoLayout, type WorkflowGraph } from '@ifnodes/shared';
+import { applyChangeSet, type CopilotChangeSet } from '@ifnodes/copilot';
 import type { ExecutionDetail, GraphIssueDto, NodeConfigIssueDto, NodeTypeInfo } from '@/lib/types';
 
 /** Datos de un nodo de flujo */
@@ -90,6 +91,10 @@ interface BuilderState {
   setIssues(structure: GraphIssueDto[], config: NodeConfigIssueDto[]): void;
   markSaved(savedAt: string): void;
   setActiveExecution(execution: ExecutionDetail | null): void;
+  /** Aplica una propuesta del copilot al grafo (con undo + autosave). */
+  applyProposal(changeSet: CopilotChangeSet): { ok: boolean; applied?: string[]; errors?: string[] };
+  /** Reacomoda los nodos en capas de izquierda a derecha (solo posiciones). */
+  autoLayout(): void;
   toGraph(): WorkflowGraph;
 }
 
@@ -404,6 +409,60 @@ export const useBuilderStore = create<BuilderState>((set, get) => {
 
     setActiveExecution(activeExecution) {
       set({ activeExecution });
+    },
+
+    autoLayout() {
+      const laid = computeAutoLayout(get().toGraph());
+      const posById = new Map(laid.nodes.map((n) => [n.id, n.position]));
+      snapshot();
+      mutate({
+        nodes: get().nodes.map((node) =>
+          posById.has(node.id) ? { ...node, position: posById.get(node.id)! } : node,
+        ),
+      });
+    },
+
+    applyProposal(changeSet) {
+      const resolve = (type: string) => {
+        const info = get().nodeTypes.get(type);
+        return info ? { version: info.version, defaultConfig: info.defaultConfig } : undefined;
+      };
+      const result = applyChangeSet(get().toGraph(), changeSet, resolve, generateId);
+      if (!result.ok || !result.graph) return { ok: false, errors: result.errors };
+
+      const graph = result.graph;
+      const flowNodes: CanvasNode[] = graph.nodes.map((node) => ({
+        id: node.id,
+        type: 'ifn' as const,
+        position: node.position,
+        data: {
+          nodeType: node.type,
+          nodeVersion: node.nodeVersion,
+          name: node.name,
+          config: node.config,
+          disabled: node.disabled,
+          notes: node.notes,
+        },
+      }));
+      const noteNodes: CanvasNode[] = graph.stickyNotes.map((note) => ({
+        id: note.id,
+        type: 'note' as const,
+        position: note.position,
+        data: { text: note.text },
+      }));
+      snapshot();
+      mutate({
+        nodes: [...flowNodes, ...noteNodes],
+        edges: graph.edges.map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          sourceHandle: edge.sourcePort,
+          target: edge.target,
+          targetHandle: edge.targetPort,
+        })),
+        selectedNodeId: null,
+      });
+      return { ok: true, applied: result.applied };
     },
 
     toGraph() {

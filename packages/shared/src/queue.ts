@@ -6,6 +6,21 @@ export interface ExecutionJobData {
 }
 
 /**
+ * Cola de disparos programados (cron). El worker mantiene un "job scheduler"
+ * de BullMQ por flujo que tenga un nodo trigger.schedule; al dispararse, crea
+ * y encola una ejecución. Ver apps/worker/src/scheduler.ts.
+ */
+export const SCHEDULES_QUEUE = 'schedules';
+
+export interface ScheduleJobData {
+  workflowId: string;
+  /** Si está, en cada disparo corre este flujo UNA VEZ POR CONTACTO (campaña). */
+  campaignWorkflowId?: string;
+  /** Filtro de contactos por estado para la campaña programada. */
+  campaignStatus?: string;
+}
+
+/**
  * Opciones de conexión Redis para BullMQ a partir de REDIS_URL.
  * Se pasan opciones planas (no una instancia) para evitar acoplar
  * la versión de ioredis de cada consumidor.

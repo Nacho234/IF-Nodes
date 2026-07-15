@@ -33,7 +33,7 @@ export const aiClassifyNode = defineNode<Config, unknown, { category: string; pr
       credentialTypes: ['anthropic', 'openai', 'gemini'],
       helpText: 'Sin credencial, usa el proveedor de desarrollo (heurística simple, sin costo).',
     },
-    { field: 'model', label: 'Modelo', widget: 'text', placeholder: 'claude-sonnet-4-5 / gpt-4o…' },
+    { field: 'model', label: 'Modelo', widget: 'text', placeholder: 'claude-sonnet-4-6 / gpt-4o…' },
     { field: 'text', label: 'Texto a clasificar', widget: 'textarea', supportsExpressions: true },
     {
       field: 'categories',

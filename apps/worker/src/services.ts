@@ -4,17 +4,36 @@
  * Se construyen por ejecución para poder atribuir uso/credenciales al contexto.
  */
 import { lookup } from 'node:dns/promises';
-import type { PrismaClient } from '@ifnodes/database';
+import { createTransport } from 'nodemailer';
+import type { Prisma, PrismaClient } from '@ifnodes/database';
 import { checkSsrf, ssrfPolicyFromEnv } from '@ifnodes/shared';
 import { decryptSecret } from '@ifnodes/shared/dist/crypto';
-import { sendWhatsAppText } from '@ifnodes/node-definitions';
+import { sendWhatsAppText, rankKnowledge } from '@ifnodes/node-definitions';
 import type {
+  AIChatInput,
+  AIChatMessage,
+  AIChatResult,
   AIClassifyInput,
   AIClassifyResult,
   AIGenerateInput,
   AIGenerateResult,
+  AIToolCall,
+  ContactIdentity,
+  ContactRecord,
+  ContactUpsertInput,
+  ConversationRole,
+  ConversationTurn,
+  EmailSendInput,
+  EmailSendResult,
   HttpRequestInput,
   HttpResult,
+  KnowledgeSearchInput,
+  KnowledgeSearchResult,
+  MemoryLoadInput,
+  MemoryLoadResult,
+  MemorySaveInput,
+  MemorySaveResult,
+  MemorySetStatusInput,
   NodeServices,
   WhatsAppSendInput,
   WhatsAppSendResult,
@@ -221,6 +240,112 @@ async function callOpenAI(apiKey: string, model: string, input: AIGenerateInput)
   };
 }
 
+/* ── Tool-calling (nodo Agente) ─────────────────────────────── */
+
+interface AnthropicBlock {
+  type: string;
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+}
+
+/** Mapea los mensajes neutrales al formato de la Messages API (agrupa los
+ *  tool_result consecutivos en un único mensaje de usuario, como exige Anthropic). */
+function toAnthropicChatMessages(messages: AIChatMessage[]): unknown[] {
+  const out: unknown[] = [];
+  let i = 0;
+  while (i < messages.length) {
+    const message = messages[i]!;
+    if (message.role === 'user') {
+      out.push({ role: 'user', content: message.content ?? '' });
+      i += 1;
+    } else if (message.role === 'assistant') {
+      const blocks: unknown[] = [];
+      if (message.content) blocks.push({ type: 'text', text: message.content });
+      for (const call of message.toolCalls ?? []) {
+        blocks.push({ type: 'tool_use', id: call.id, name: call.name, input: call.input });
+      }
+      out.push({ role: 'assistant', content: blocks.length > 0 ? blocks : (message.content ?? '') });
+      i += 1;
+    } else {
+      const blocks: unknown[] = [];
+      while (i < messages.length && messages[i]!.role === 'tool') {
+        const tool = messages[i]!;
+        blocks.push({
+          type: 'tool_result',
+          tool_use_id: tool.toolCallId,
+          content: tool.toolResult ?? '',
+          ...(tool.isError ? { is_error: true } : {}),
+        });
+        i += 1;
+      }
+      out.push({ role: 'user', content: blocks });
+    }
+  }
+  return out;
+}
+
+async function callAnthropicChat(apiKey: string, model: string, input: AIChatInput): Promise<AIChatResult> {
+  const body: Record<string, unknown> = {
+    model,
+    max_tokens: input.maxTokens ?? 1024,
+    messages: toAnthropicChatMessages(input.messages),
+  };
+  if (input.system) body.system = input.system;
+  if (input.tools && input.tools.length > 0) {
+    body.tools = input.tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      input_schema: tool.parameters,
+    }));
+  }
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!response.ok) throw new Error(`Anthropic respondió HTTP ${response.status}`);
+  const json = (await response.json()) as {
+    content: AnthropicBlock[];
+    stop_reason?: string;
+    usage?: { input_tokens: number; output_tokens: number };
+  };
+  let text = '';
+  const toolCalls: AIToolCall[] = [];
+  for (const block of json.content ?? []) {
+    if (block.type === 'text') text += block.text ?? '';
+    else if (block.type === 'tool_use' && block.id && block.name) {
+      toolCalls.push({ id: block.id, name: block.name, input: block.input ?? {} });
+    }
+  }
+  return {
+    text,
+    toolCalls,
+    stopReason: json.stop_reason ?? 'end_turn',
+    provider: 'anthropic',
+    model,
+    inputTokens: json.usage?.input_tokens ?? approxTokens(JSON.stringify(input.messages)),
+    outputTokens: json.usage?.output_tokens ?? approxTokens(text),
+  };
+}
+
+function devEchoChat(input: AIChatInput): AIChatResult {
+  const lastUser = [...input.messages].reverse().find((m) => m.role === 'user');
+  const snippet = (lastUser?.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 150);
+  const text = `[modo desarrollo · sin IA real] El agente respondería en base a: "${snippet}". Configurá una credencial de Anthropic para el modo agente real.`;
+  return {
+    text,
+    toolCalls: [],
+    stopReason: 'end_turn',
+    provider: 'dev-echo',
+    model: 'dev-echo',
+    inputTokens: approxTokens(lastUser?.content ?? ''),
+    outputTokens: approxTokens(text),
+  };
+}
+
 /** Proveedor de desarrollo: determinista, sin costo, claramente identificado. */
 function devEchoGenerate(input: AIGenerateInput): AIGenerateResult {
   const snippet = input.prompt.replace(/\s+/g, ' ').trim().slice(0, 200);
@@ -274,7 +399,7 @@ function makeAIService(ctx: ServiceContext, nodeIdRef: { current: string }): Nod
       const cred = await resolveProvider(input.credentialId);
       let result: AIGenerateResult;
       if (cred?.slug === 'anthropic' && cred.data.apiKey) {
-        result = await callAnthropic(cred.data.apiKey, input.model || 'claude-sonnet-4-5', input);
+        result = await callAnthropic(cred.data.apiKey, input.model || 'claude-sonnet-4-6', input);
       } else if (cred?.slug === 'openai' && cred.data.apiKey) {
         result = await callOpenAI(cred.data.apiKey, input.model || 'gpt-4o-mini', input);
       } else {
@@ -290,7 +415,7 @@ function makeAIService(ctx: ServiceContext, nodeIdRef: { current: string }): Nod
         const prompt = `Clasificá el siguiente mensaje en UNA de estas categorías: ${input.categories.join(', ')}.\nRespondé SOLO con el nombre exacto de la categoría, sin explicaciones.\n\nMensaje: ${input.text}`;
         const generation =
           cred.slug === 'anthropic'
-            ? await callAnthropic(cred.data.apiKey, input.model || 'claude-sonnet-4-5', { prompt, maxTokens: 20 })
+            ? await callAnthropic(cred.data.apiKey, input.model || 'claude-sonnet-4-6', { prompt, maxTokens: 20 })
             : await callOpenAI(cred.data.apiKey, input.model || 'gpt-4o-mini', { prompt, maxTokens: 20 });
         await record(generation);
         const answer = generation.text.trim().toLowerCase();
@@ -303,6 +428,40 @@ function makeAIService(ctx: ServiceContext, nodeIdRef: { current: string }): Nod
       }
       const result = devEchoClassify(input);
       await record({ ...result, inputTokens: approxTokens(input.text), outputTokens: 1 });
+      return result;
+    },
+
+    async chat(input: AIChatInput): Promise<AIChatResult> {
+      const cred = await resolveProvider(input.credentialId);
+      let result: AIChatResult;
+      if (cred?.slug === 'anthropic' && cred.data.apiKey) {
+        result = await callAnthropicChat(cred.data.apiKey, input.model || 'claude-sonnet-4-6', input);
+      } else if (cred?.slug === 'openai' && cred.data.apiKey) {
+        // OpenAI: v1 sin tool-calling — una respuesta directa (el agente termina en un paso)
+        const lastUser = [...input.messages].reverse().find((m) => m.role === 'user');
+        const gen = await callOpenAI(cred.data.apiKey, input.model || 'gpt-4o-mini', {
+          prompt: lastUser?.content ?? '',
+          system: input.system,
+          maxTokens: input.maxTokens,
+        });
+        result = {
+          text: gen.text,
+          toolCalls: [],
+          stopReason: 'end_turn',
+          provider: gen.provider,
+          model: gen.model,
+          inputTokens: gen.inputTokens,
+          outputTokens: gen.outputTokens,
+        };
+      } else {
+        result = devEchoChat(input);
+      }
+      await record({
+        provider: result.provider,
+        model: result.model,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+      });
       return result;
     },
   };
@@ -332,10 +491,204 @@ function makeWhatsAppService(ctx: ServiceContext): NodeServices['whatsapp'] {
   };
 }
 
+/* ── Memoria de conversación (persistida en la DB) ──────────── */
+
+const ROLE_LABEL: Record<string, string> = { user: 'Cliente', assistant: 'Bot', system: 'Sistema' };
+
+function formatTranscript(turns: ConversationTurn[]): string {
+  return turns.map((t) => `${ROLE_LABEL[t.role] ?? t.role}: ${t.text}`).join('\n');
+}
+
+function makeMemoryService(ctx: ServiceContext): NodeServices['memory'] {
+  const findOrCreate = (channel: string, contact: string) =>
+    ctx.prisma.conversation.upsert({
+      where: { projectId_channel_contact: { projectId: ctx.projectId, channel, contact } },
+      create: { projectId: ctx.projectId, channel, contact },
+      update: {},
+    });
+
+  return {
+    async loadHistory(input: MemoryLoadInput): Promise<MemoryLoadResult> {
+      const conversation = await findOrCreate(input.channel, input.contact);
+      const rows = await ctx.prisma.conversationMessage.findMany({
+        where: { conversationId: conversation.id },
+        orderBy: { createdAt: 'desc' },
+        take: input.limit ?? 10,
+      });
+      const turns: ConversationTurn[] = rows
+        .reverse()
+        .map((row) => ({ role: row.role as ConversationRole, text: row.text }));
+      return {
+        conversationId: conversation.id,
+        turns,
+        transcript: formatTranscript(turns),
+        status: conversation.status,
+      };
+    },
+
+    async saveTurn(input: MemorySaveInput): Promise<MemorySaveResult> {
+      const conversation = await findOrCreate(input.channel, input.contact);
+      await ctx.prisma.conversationMessage.create({
+        data: { conversationId: conversation.id, role: input.role, text: input.text },
+      });
+      await ctx.prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { lastMessageAt: new Date() },
+      });
+      return { conversationId: conversation.id };
+    },
+
+    async setStatus(input: MemorySetStatusInput): Promise<{ conversationId: string }> {
+      const conversation = await findOrCreate(input.channel, input.contact);
+      await ctx.prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { status: input.status },
+      });
+      return { conversationId: conversation.id };
+    },
+  };
+}
+
+/* ── Email (SMTP con nodemailer) ────────────────────────────── */
+
+function makeEmailService(ctx: ServiceContext): NodeServices['email'] {
+  const resolveCredential = makeCredentialResolver(ctx);
+  return {
+    async send(input: EmailSendInput): Promise<EmailSendResult> {
+      const cred = input.credentialId ? await resolveCredential(input.credentialId) : null;
+      if (cred?.slug === 'smtp' && cred.data.host && cred.data.user) {
+        const port = Number(cred.data.port) || 587;
+        const transport = createTransport({
+          host: cred.data.host,
+          port,
+          secure: port === 465,
+          auth: { user: cred.data.user, pass: cred.data.password },
+        });
+        const info = await transport.sendMail({
+          from: input.from || cred.data.user,
+          to: input.to,
+          subject: input.subject,
+          text: input.text || undefined,
+          html: input.html || undefined,
+        });
+        return { to: input.to, subject: input.subject, sent: true, simulated: false, messageId: info.messageId };
+      }
+      // Sin credencial: simulado (no rompe el flujo al probar)
+      return { to: input.to, subject: input.subject, sent: false, simulated: true };
+    },
+  };
+}
+
+/* ── Contactos / CRM (persistido en la DB) ──────────────────── */
+
+interface ContactRow {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  status: string;
+  tags: string[];
+  notes: string | null;
+  data: unknown;
+}
+
+function toContactRecord(row: ContactRow): ContactRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    email: row.email,
+    status: row.status,
+    tags: row.tags,
+    notes: row.notes,
+    data: (row.data as Record<string, unknown> | null) ?? null,
+  };
+}
+
+function makeContactService(ctx: ServiceContext): NodeServices['contacts'] {
+  const findRow = async (identity: ContactIdentity): Promise<ContactRow | null> => {
+    if (identity.phone) {
+      const byPhone = await ctx.prisma.contact.findFirst({ where: { projectId: ctx.projectId, phone: identity.phone } });
+      if (byPhone) return byPhone;
+    }
+    if (identity.email) {
+      return ctx.prisma.contact.findFirst({ where: { projectId: ctx.projectId, email: identity.email } });
+    }
+    return null;
+  };
+
+  return {
+    async find(identity: ContactIdentity): Promise<ContactRecord | null> {
+      const row = await findRow(identity);
+      return row ? toContactRecord(row) : null;
+    },
+
+    async upsert(input: ContactUpsertInput): Promise<ContactRecord> {
+      const existing = await findRow(input);
+      const contacted = input.markContacted ? { lastContactedAt: new Date() } : {};
+      if (existing) {
+        const mergedTags = input.tags
+          ? Array.from(new Set([...existing.tags, ...input.tags]))
+          : undefined;
+        const mergedData = input.data
+          ? ({ ...((existing.data as Record<string, unknown> | null) ?? {}), ...input.data } as Prisma.InputJsonValue)
+          : undefined;
+        const updated = await ctx.prisma.contact.update({
+          where: { id: existing.id },
+          data: {
+            name: input.name ?? undefined,
+            phone: input.phone ?? undefined,
+            email: input.email ?? undefined,
+            status: input.status ?? undefined,
+            tags: mergedTags,
+            notes: input.notes ?? undefined,
+            data: mergedData,
+            ...contacted,
+          },
+        });
+        return toContactRecord(updated);
+      }
+      const created = await ctx.prisma.contact.create({
+        data: {
+          projectId: ctx.projectId,
+          name: input.name,
+          phone: input.phone,
+          email: input.email,
+          status: input.status ?? 'new',
+          tags: input.tags ?? [],
+          notes: input.notes,
+          data: (input.data as Prisma.InputJsonValue | undefined) ?? undefined,
+          ...contacted,
+        },
+      });
+      return toContactRecord(created);
+    },
+  };
+}
+
+/* ── Base de conocimiento (RAG v1, keyword sobre la DB) ─────── */
+
+function makeKnowledgeService(ctx: ServiceContext): NodeServices['knowledge'] {
+  return {
+    async search(input: KnowledgeSearchInput): Promise<KnowledgeSearchResult> {
+      const rows = await ctx.prisma.knowledgeChunk.findMany({
+        where: { projectId: ctx.projectId },
+        select: { id: true, title: true, content: true },
+        take: 1000,
+      });
+      return rankKnowledge(rows, input.query, input.limit ?? 3);
+    },
+  };
+}
+
 export function buildServices(ctx: ServiceContext, nodeIdRef: { current: string }): NodeServices {
   return {
     http: makeHttpService(ctx),
     ai: makeAIService(ctx, nodeIdRef),
     whatsapp: makeWhatsAppService(ctx),
+    memory: makeMemoryService(ctx),
+    email: makeEmailService(ctx),
+    contacts: makeContactService(ctx),
+    knowledge: makeKnowledgeService(ctx),
   };
 }

@@ -24,6 +24,7 @@ import {
   packageJson,
   railwayJson,
   readme,
+  slugify,
   type ResolvedCredential,
 } from './generator';
 
@@ -135,6 +136,16 @@ export class ExportsService {
         JSON.stringify(plan.credentialManifest, null, 2),
       );
 
+      // Base de conocimiento del proyecto (para el nodo Buscar conocimiento)
+      const knowledge = await this.prisma.client.knowledgeChunk.findMany({
+        where: { projectId: workflow.project.id },
+        select: { id: true, title: true, content: true },
+      });
+      await writeFile(
+        resolve(projectDir, 'workflow', 'knowledge.json'),
+        JSON.stringify(knowledge, null, 2),
+      );
+
       // 3. Archivos del proyecto
       await writeFile(resolve(projectDir, 'package.json'), packageJson(plan));
       await writeFile(resolve(projectDir, 'Dockerfile'), dockerfile());
@@ -173,6 +184,144 @@ export class ExportsService {
         zipPath,
         sizeBytes,
         manifest: plan.manifest,
+        requiredEnvVars: plan.envVars,
+      };
+    } catch (error) {
+      await this.prisma.client.export.update({
+        where: { id: exportRow.id },
+        data: { status: 'FAILED', error: error instanceof Error ? error.message.slice(0, 500) : 'error' },
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Genera el runtime del PROYECTO COMPLETO: bundlea TODOS sus flujos en un solo
+   * paquete (flows.json), con un orquestador que rutea entrada/campañas/cron.
+   * Para cada flujo usa su versión estable (o la última, o el borrador vivo).
+   * Es la Opción B: el bot entero corre en la infra del cliente sin IF Nodes.
+   */
+  async generateProject(projectId: string, user: User) {
+    const project = await this.prisma.client.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, name: true },
+    });
+    if (!project) throw new NotFoundException('Proyecto no encontrado.');
+
+    const workflows = await this.prisma.client.workflow.findMany({
+      where: { projectId },
+      include: {
+        versions: { orderBy: [{ isStable: 'desc' }, { number: 'desc' }], take: 1 },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (workflows.length === 0) throw new BadRequestException('El proyecto no tiene flujos para exportar.');
+
+    // Para cada flujo: versión estable/última si existe, si no el borrador vivo.
+    const flows = workflows.map((wf) => {
+      const raw = wf.versions[0]?.graph ?? wf.draftGraph;
+      const graph = workflowGraphSchema.parse(raw);
+      this.assertExportable(graph);
+      return { id: wf.id, name: wf.name, slug: slugify(wf.name) || wf.id, graph, version: wf.versions[0]?.number ?? 0 };
+    });
+
+    // Grafo combinado (unión de nodos) para calcular credenciales/env/entrypoints de TODO el proyecto.
+    const mergedGraph: WorkflowGraph = {
+      nodes: flows.flatMap((f) => f.graph.nodes),
+      edges: [],
+      stickyNotes: [],
+      groups: [],
+    };
+    const maxVersion = Math.max(1, ...flows.map((f) => f.version));
+
+    const exportRow = await this.prisma.client.export.create({
+      data: { projectId, versionId: null, status: 'GENERATING', format: 'zip', createdById: user.id },
+    });
+
+    try {
+      const resolved = await this.resolveReferencedCredentials(mergedGraph, projectId);
+      const plan = buildExportPlan(project.name, maxVersion, mergedGraph, resolved);
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const projectDir = resolve(OUTPUT_ROOT, `${plan.slug}-proyecto-${stamp}`);
+      await mkdir(resolve(projectDir, 'workflow'), { recursive: true });
+      await mkdir(resolve(projectDir, 'dist'), { recursive: true });
+
+      // 1. Runtime empaquetado (autocontenido)
+      await build({
+        entryPoints: [RUNTIME_ENTRY],
+        outfile: resolve(projectDir, 'dist', 'main.js'),
+        bundle: true,
+        platform: 'node',
+        format: 'cjs',
+        target: 'node20',
+        minify: true,
+        legalComments: 'none',
+      });
+
+      // 2. Todos los flujos del proyecto + manifest + credenciales (sin secretos)
+      await writeFile(
+        resolve(projectDir, 'workflow', 'flows.json'),
+        JSON.stringify(
+          flows.map((f) => ({ id: f.id, name: f.name, slug: f.slug, graph: f.graph })),
+          null,
+          2,
+        ),
+      );
+      await writeFile(resolve(projectDir, 'workflow', 'manifest.json'), JSON.stringify(plan.manifest, null, 2));
+      await writeFile(
+        resolve(projectDir, 'workflow', 'credentials.json'),
+        JSON.stringify(plan.credentialManifest, null, 2),
+      );
+
+      const knowledge = await this.prisma.client.knowledgeChunk.findMany({
+        where: { projectId },
+        select: { id: true, title: true, content: true },
+      });
+      await writeFile(resolve(projectDir, 'workflow', 'knowledge.json'), JSON.stringify(knowledge, null, 2));
+
+      // 3. Archivos del proyecto
+      await writeFile(resolve(projectDir, 'package.json'), packageJson(plan));
+      await writeFile(resolve(projectDir, 'Dockerfile'), dockerfile());
+      await writeFile(resolve(projectDir, 'railway.json'), railwayJson());
+      await writeFile(resolve(projectDir, '.env.example'), envExample(plan));
+      await writeFile(resolve(projectDir, '.gitignore'), gitignore());
+      await writeFile(
+        resolve(projectDir, 'README.md'),
+        readme(plan, flows.map((f) => ({ name: f.name, slug: f.slug }))),
+      );
+
+      // 4. ZIP
+      const zipPath = `${projectDir}.zip`;
+      const sizeBytes = await this.zipDirectory(projectDir, zipPath, plan.slug);
+
+      const done = await this.prisma.client.export.update({
+        where: { id: exportRow.id },
+        data: {
+          status: 'COMPLETED',
+          manifest: plan.manifest as unknown as Prisma.InputJsonValue,
+          outputPath: zipPath,
+          sizeBytes,
+        },
+      });
+
+      await this.audit.log({
+        userId: user.id,
+        action: 'export.project.created',
+        entityType: 'export',
+        entityId: exportRow.id,
+        detail: { projectId, slug: plan.slug, flows: flows.length },
+      });
+
+      this.logger.log(`Export de proyecto ${plan.slug} listo: ${flows.length} flujos (${sizeBytes} bytes)`);
+      return {
+        id: done.id,
+        slug: plan.slug,
+        folder: projectDir,
+        zipPath,
+        sizeBytes,
+        manifest: plan.manifest,
+        flows: flows.map((f) => ({ name: f.name, slug: f.slug })),
         requiredEnvVars: plan.envVars,
       };
     } catch (error) {

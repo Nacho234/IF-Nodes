@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowRight, FlaskConical, GitBranch, KeyRound, ListChecks, Workflow } from 'lucide-react';
+import { ArrowRight, BookOpen, FlaskConical, GitBranch, Inbox, KeyRound, ListChecks, Users, Workflow } from 'lucide-react';
 import { PROJECT_TYPE_LABELS } from '@ifnodes/shared';
 import { PageHeader } from '@/components/shell/page-header';
 import { ProjectStatusBadge } from '@/components/status-badges';
@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { serverApiGet } from '@/lib/server-api';
 import { formatDateTime, timeAgo } from '@/lib/utils';
 import { DeleteProjectButton } from '@/features/projects/delete-project-button';
+import { BuildProjectButton } from '@/features/projects/build-project-button';
+import { ExportProjectButton } from '@/features/projects/export-project-button';
 import type { ProjectDetail } from '@/lib/types';
 
 /**
@@ -39,6 +41,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         actions={
           <>
             <DeleteProjectButton projectId={project.id} projectName={project.name} />
+            <BuildProjectButton projectId={project.id} />
+            <ExportProjectButton projectId={project.id} />
             {mainWorkflow ? (
               <Link
                 href={`/projects/${project.id}/builder/${mainWorkflow.id}`}
@@ -148,6 +152,45 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               <span>
                 <span className="block text-sm font-medium">Variables por entorno</span>
                 <span className="block text-xs text-faint-foreground">Dev · Testing · Production</span>
+              </span>
+            </span>
+            <ArrowRight className="size-4 text-faint-foreground" />
+          </Link>
+          <Link
+            href={`/projects/${project.id}/contacts`}
+            className="flex items-center justify-between rounded-lg border border-border bg-surface px-5 py-4 transition-colors hover:bg-surface-sunken/60"
+          >
+            <span className="flex items-center gap-3">
+              <Users className="size-4 text-muted-foreground" />
+              <span>
+                <span className="block text-sm font-medium">Contactos</span>
+                <span className="block text-xs text-faint-foreground">CRM · estado por contacto</span>
+              </span>
+            </span>
+            <ArrowRight className="size-4 text-faint-foreground" />
+          </Link>
+          <Link
+            href={`/projects/${project.id}/knowledge`}
+            className="flex items-center justify-between rounded-lg border border-border bg-surface px-5 py-4 transition-colors hover:bg-surface-sunken/60"
+          >
+            <span className="flex items-center gap-3">
+              <BookOpen className="size-4 text-muted-foreground" />
+              <span>
+                <span className="block text-sm font-medium">Base de conocimiento</span>
+                <span className="block text-xs text-faint-foreground">FAQ · tono · políticas (RAG)</span>
+              </span>
+            </span>
+            <ArrowRight className="size-4 text-faint-foreground" />
+          </Link>
+          <Link
+            href={`/projects/${project.id}/inbox`}
+            className="flex items-center justify-between rounded-lg border border-border bg-surface px-5 py-4 transition-colors hover:bg-surface-sunken/60"
+          >
+            <span className="flex items-center gap-3">
+              <Inbox className="size-4 text-muted-foreground" />
+              <span>
+                <span className="block text-sm font-medium">Bandeja de operador</span>
+                <span className="block text-xs text-faint-foreground">Conversaciones en handoff</span>
               </span>
             </span>
             <ArrowRight className="size-4 text-faint-foreground" />

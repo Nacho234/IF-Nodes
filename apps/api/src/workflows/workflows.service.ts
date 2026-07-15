@@ -6,7 +6,7 @@ import {
   type GraphIssue,
   type WorkflowGraph,
 } from '@ifnodes/shared';
-import { nodeRegistry } from '@ifnodes/node-definitions';
+import { analyzeReadiness, findExpressionIssues, nodeRegistry } from '@ifnodes/node-definitions';
 import { PrismaService } from '../common/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -34,6 +34,44 @@ export class WorkflowsService {
     });
     if (!workflow) throw new NotFoundException('Flujo no encontrado.');
     return workflow;
+  }
+
+  /** Checklist de "Puesta en marcha": qué falta conectar/cargar para que corra de verdad. */
+  async readiness(id: string) {
+    const workflow = await this.prisma.client.workflow.findUnique({
+      where: { id },
+      select: { draftGraph: true, projectId: true },
+    });
+    if (!workflow) throw new NotFoundException('Flujo no encontrado.');
+
+    const [credentials, knowledgeCount, environments] = await Promise.all([
+      this.prisma.client.credential.findMany({
+        where: { active: true, OR: [{ projectId: workflow.projectId }, { projectId: null }] },
+        select: { integration: { select: { slug: true } } },
+      }),
+      this.prisma.client.knowledgeChunk.count({ where: { projectId: workflow.projectId } }),
+      this.prisma.client.environment.findMany({
+        where: { projectId: workflow.projectId },
+        select: { variables: { select: { key: true } } },
+      }),
+    ]);
+
+    const parsed = workflowGraphSchema.safeParse(workflow.draftGraph);
+    const graph: WorkflowGraph = parsed.success
+      ? parsed.data
+      : { nodes: [], edges: [], stickyNotes: [], groups: [] };
+
+    const environmentKeys = Array.from(
+      new Set(environments.flatMap((env) => env.variables.map((v) => v.key))),
+    );
+
+    return {
+      items: analyzeReadiness(graph, {
+        availableCredentialTypes: credentials.map((c) => c.integration.slug),
+        knowledgeCount,
+        environmentKeys,
+      }),
+    };
   }
 
   /**
@@ -109,6 +147,12 @@ export class WorkflowsService {
         }
       }
     }
+
+    // Referencias de expresiones mal escritas (atajos inexistentes, nodos que no están)
+    for (const issue of findExpressionIssues(graph)) {
+      configIssues.push(issue);
+    }
+
     return { structureIssues, configIssues };
   }
 }

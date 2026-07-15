@@ -2,15 +2,27 @@ import type { NodeDefinition } from './contract';
 import { manualTriggerNode } from './nodes/trigger/manual-trigger';
 import { webhookTriggerNode } from './nodes/trigger/webhook-trigger';
 import { whatsappTriggerNode } from './nodes/trigger/whatsapp-trigger';
+import { scheduleTriggerNode } from './nodes/trigger/schedule-trigger';
+import { campaignTriggerNode } from './nodes/trigger/campaign-trigger';
 import { conditionNode } from './nodes/logic/condition';
 import { switchNode } from './nodes/logic/switch';
 import { setVariableNode } from './nodes/logic/set-variable';
+import { waitNode } from './nodes/logic/wait';
 import { transformNode } from './nodes/data/transform';
 import { respondNode } from './nodes/communication/respond';
+import { sendEmailNode } from './nodes/communication/send-email';
+import { escalateNode } from './nodes/communication/escalate';
 import { httpRequestNode } from './nodes/integrations/http-request';
+import { googleCalendarNode } from './nodes/integrations/google-calendar';
 import { aiGenerateNode } from './nodes/ai/generate';
 import { aiClassifyNode } from './nodes/ai/classify';
+import { aiAgentNode } from './nodes/ai/agent';
+import { knowledgeSearchNode } from './nodes/ai/knowledge-search';
 import { whatsappSendTextNode } from './nodes/whatsapp/send-text';
+import { memoryLoadHistoryNode } from './nodes/memory/load-history';
+import { memorySaveTurnNode } from './nodes/memory/save-turn';
+import { contactUpsertNode } from './nodes/contacts/upsert';
+import { contactFindNode } from './nodes/contacts/find';
 
 /**
  * Registro central de nodos. Agregar un nodo nuevo = crear su archivo
@@ -23,14 +35,26 @@ const definitions = [
   manualTriggerNode,
   webhookTriggerNode,
   whatsappTriggerNode,
+  scheduleTriggerNode,
+  campaignTriggerNode,
   conditionNode,
   switchNode,
   setVariableNode,
+  waitNode,
   transformNode,
   aiClassifyNode,
   aiGenerateNode,
+  aiAgentNode,
+  knowledgeSearchNode,
   httpRequestNode,
+  googleCalendarNode,
   whatsappSendTextNode,
+  memoryLoadHistoryNode,
+  memorySaveTurnNode,
+  contactUpsertNode,
+  contactFindNode,
+  sendEmailNode,
+  escalateNode,
   respondNode,
 ] as unknown as NodeDefinition[];
 

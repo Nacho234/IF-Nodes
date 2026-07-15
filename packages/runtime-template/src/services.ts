@@ -4,15 +4,32 @@
  * de entorno según el mapa `credentials.json` (nunca contienen secretos).
  */
 import { lookup } from 'node:dns/promises';
+import { createTransport } from 'nodemailer';
 import { checkSsrf, ssrfPolicyFromEnv } from '@ifnodes/shared';
-import { sendWhatsAppText } from '@ifnodes/node-definitions';
+import { sendWhatsAppText, rankKnowledge, type KnowledgeChunkLike } from '@ifnodes/node-definitions';
+import { InMemoryStore, type RuntimeStore } from './store';
 import type {
+  AIChatInput,
+  AIChatMessage,
+  AIChatResult,
   AIClassifyInput,
   AIClassifyResult,
   AIGenerateInput,
   AIGenerateResult,
+  AIToolCall,
+  ContactIdentity,
+  ContactUpsertInput,
+  KnowledgeSearchInput,
+  KnowledgeSearchResult,
+  EmailSendInput,
+  EmailSendResult,
   HttpRequestInput,
   HttpResult,
+  MemoryLoadInput,
+  MemoryLoadResult,
+  MemorySaveInput,
+  MemorySaveResult,
+  MemorySetStatusInput,
   NodeServices,
   WhatsAppSendInput,
   WhatsAppSendResult,
@@ -122,7 +139,133 @@ function devEchoGenerate(input: AIGenerateInput): AIGenerateResult {
   return { text, provider: 'dev-echo', model: 'dev-echo', inputTokens: approxTokens(input.prompt), outputTokens: approxTokens(text) };
 }
 
-export function buildRuntimeServices(credentials: CredentialManifest): NodeServices {
+/* ── Tool-calling (nodo Agente) ─────────────────────────────── */
+
+interface AnthropicBlock {
+  type: string;
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+}
+
+function toAnthropicChatMessages(messages: AIChatMessage[]): unknown[] {
+  const out: unknown[] = [];
+  let i = 0;
+  while (i < messages.length) {
+    const message = messages[i]!;
+    if (message.role === 'user') {
+      out.push({ role: 'user', content: message.content ?? '' });
+      i += 1;
+    } else if (message.role === 'assistant') {
+      const blocks: unknown[] = [];
+      if (message.content) blocks.push({ type: 'text', text: message.content });
+      for (const call of message.toolCalls ?? []) {
+        blocks.push({ type: 'tool_use', id: call.id, name: call.name, input: call.input });
+      }
+      out.push({ role: 'assistant', content: blocks.length > 0 ? blocks : (message.content ?? '') });
+      i += 1;
+    } else {
+      const blocks: unknown[] = [];
+      while (i < messages.length && messages[i]!.role === 'tool') {
+        const tool = messages[i]!;
+        blocks.push({
+          type: 'tool_result',
+          tool_use_id: tool.toolCallId,
+          content: tool.toolResult ?? '',
+          ...(tool.isError ? { is_error: true } : {}),
+        });
+        i += 1;
+      }
+      out.push({ role: 'user', content: blocks });
+    }
+  }
+  return out;
+}
+
+async function callAnthropicChat(apiKey: string, model: string, input: AIChatInput): Promise<AIChatResult> {
+  const body: Record<string, unknown> = {
+    model,
+    max_tokens: input.maxTokens ?? 1024,
+    messages: toAnthropicChatMessages(input.messages),
+  };
+  if (input.system) body.system = input.system;
+  if (input.tools && input.tools.length > 0) {
+    body.tools = input.tools.map((tool) => ({ name: tool.name, description: tool.description, input_schema: tool.parameters }));
+  }
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!response.ok) throw new Error(`Anthropic respondió HTTP ${response.status}`);
+  const json = (await response.json()) as {
+    content: AnthropicBlock[];
+    stop_reason?: string;
+    usage?: { input_tokens: number; output_tokens: number };
+  };
+  let text = '';
+  const toolCalls: AIToolCall[] = [];
+  for (const block of json.content ?? []) {
+    if (block.type === 'text') text += block.text ?? '';
+    else if (block.type === 'tool_use' && block.id && block.name) {
+      toolCalls.push({ id: block.id, name: block.name, input: block.input ?? {} });
+    }
+  }
+  return {
+    text,
+    toolCalls,
+    stopReason: json.stop_reason ?? 'end_turn',
+    provider: 'anthropic',
+    model,
+    inputTokens: json.usage?.input_tokens ?? approxTokens(JSON.stringify(input.messages)),
+    outputTokens: json.usage?.output_tokens ?? approxTokens(text),
+  };
+}
+
+function devEchoChat(input: AIChatInput): AIChatResult {
+  const lastUser = [...input.messages].reverse().find((m) => m.role === 'user');
+  const snippet = (lastUser?.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 150);
+  const text = `[modo desarrollo · sin IA real] El agente respondería en base a: "${snippet}". Configurá una credencial de Anthropic para el modo agente real.`;
+  return { text, toolCalls: [], stopReason: 'end_turn', provider: 'dev-echo', model: 'dev-echo', inputTokens: approxTokens(lastUser?.content ?? ''), outputTokens: approxTokens(text) };
+}
+
+/* ── Memoria de conversación (en proceso, efímera) ──────────────
+ * El runtime exportado no tiene DB por defecto: la memoria vive en el proceso
+ * y se reinicia si el proceso se reinicia. Alcanza para conversaciones activas;
+ * para persistencia real se conecta una DB en una fase futura. El store es a
+ * nivel de módulo para sobrevivir entre requests dentro del mismo proceso.
+ */
+const ROLE_LABEL: Record<string, string> = { user: 'Cliente', assistant: 'Bot', system: 'Sistema' };
+const memoryKey = (channel: string, contact: string) => `${channel}:${contact}`;
+
+export function buildRuntimeServices(
+  credentials: CredentialManifest,
+  knowledge: KnowledgeChunkLike[] = [],
+  store: RuntimeStore = new InMemoryStore(),
+): NodeServices {
+  const memory: NodeServices['memory'] = {
+    async loadHistory(input: MemoryLoadInput): Promise<MemoryLoadResult> {
+      const { turns, status } = await store.memoryLoad(input.channel, input.contact, input.limit ?? 10);
+      const transcript = turns.map((t) => `${ROLE_LABEL[t.role] ?? t.role}: ${t.text}`).join('\n');
+      return { conversationId: memoryKey(input.channel, input.contact), turns, transcript, status };
+    },
+    async saveTurn(input: MemorySaveInput): Promise<MemorySaveResult> {
+      await store.memorySave(input.channel, input.contact, input.role, input.text);
+      return { conversationId: memoryKey(input.channel, input.contact) };
+    },
+    async setStatus(input: MemorySetStatusInput): Promise<{ conversationId: string }> {
+      await store.memorySetStatus(input.channel, input.contact, input.status);
+      return { conversationId: memoryKey(input.channel, input.contact) };
+    },
+  };
+
+  const contacts: NodeServices['contacts'] = {
+    find: (identity: ContactIdentity) => store.contactFind(identity),
+    upsert: (input: ContactUpsertInput) => store.contactUpsert(input),
+  };
+
   const http: NodeServices['http'] = {
     async request(input: HttpRequestInput): Promise<HttpResult> {
       const headers: Record<string, string> = { ...(input.headers ?? {}) };
@@ -169,7 +312,7 @@ export function buildRuntimeServices(credentials: CredentialManifest): NodeServi
   const ai: NodeServices['ai'] = {
     async generateText(input: AIGenerateInput): Promise<AIGenerateResult> {
       const cred = input.credentialId ? resolveCredential(credentials, input.credentialId) : null;
-      if (cred?.slug === 'anthropic' && cred.data.apiKey) return callAnthropic(cred.data.apiKey, input.model || 'claude-sonnet-4-5', input);
+      if (cred?.slug === 'anthropic' && cred.data.apiKey) return callAnthropic(cred.data.apiKey, input.model || 'claude-sonnet-4-6', input);
       if (cred?.slug === 'openai' && cred.data.apiKey) return callOpenAI(cred.data.apiKey, input.model || 'gpt-4o-mini', input);
       return devEchoGenerate(input);
     },
@@ -179,7 +322,7 @@ export function buildRuntimeServices(credentials: CredentialManifest): NodeServi
         const prompt = `Clasificá el mensaje en UNA categoría: ${input.categories.join(', ')}.\nRespondé SOLO el nombre exacto.\n\nMensaje: ${input.text}`;
         const gen =
           cred.slug === 'anthropic'
-            ? await callAnthropic(cred.data.apiKey, input.model || 'claude-sonnet-4-5', { prompt, maxTokens: 20 })
+            ? await callAnthropic(cred.data.apiKey, input.model || 'claude-sonnet-4-6', { prompt, maxTokens: 20 })
             : await callOpenAI(cred.data.apiKey, input.model || 'gpt-4o-mini', { prompt, maxTokens: 20 });
         const answer = gen.text.trim().toLowerCase();
         const matched =
@@ -192,6 +335,22 @@ export function buildRuntimeServices(credentials: CredentialManifest): NodeServi
       const text = input.text.toLowerCase();
       const match = input.categories.find((c) => text.includes(c.toLowerCase()));
       return { category: match ?? input.categories[0] ?? 'otro', provider: 'dev-echo', model: 'dev-echo' };
+    },
+    async chat(input: AIChatInput): Promise<AIChatResult> {
+      const cred = input.credentialId ? resolveCredential(credentials, input.credentialId) : null;
+      if (cred?.slug === 'anthropic' && cred.data.apiKey) {
+        return callAnthropicChat(cred.data.apiKey, input.model || 'claude-sonnet-4-6', input);
+      }
+      if (cred?.slug === 'openai' && cred.data.apiKey) {
+        const lastUser = [...input.messages].reverse().find((m) => m.role === 'user');
+        const gen = await callOpenAI(cred.data.apiKey, input.model || 'gpt-4o-mini', {
+          prompt: lastUser?.content ?? '',
+          system: input.system,
+          maxTokens: input.maxTokens,
+        });
+        return { text: gen.text, toolCalls: [], stopReason: 'end_turn', provider: gen.provider, model: gen.model, inputTokens: gen.inputTokens, outputTokens: gen.outputTokens };
+      }
+      return devEchoChat(input);
     },
   };
 
@@ -211,5 +370,35 @@ export function buildRuntimeServices(credentials: CredentialManifest): NodeServi
     },
   };
 
-  return { http, ai, whatsapp };
+  const email: NodeServices['email'] = {
+    async send(input: EmailSendInput): Promise<EmailSendResult> {
+      const cred = input.credentialId ? resolveCredential(credentials, input.credentialId) : null;
+      if (cred?.slug === 'smtp' && cred.data.host && cred.data.user) {
+        const port = Number(cred.data.port) || 587;
+        const transport = createTransport({
+          host: cred.data.host,
+          port,
+          secure: port === 465,
+          auth: { user: cred.data.user, pass: cred.data.password },
+        });
+        const info = await transport.sendMail({
+          from: input.from || cred.data.user,
+          to: input.to,
+          subject: input.subject,
+          text: input.text || undefined,
+          html: input.html || undefined,
+        });
+        return { to: input.to, subject: input.subject, sent: true, simulated: false, messageId: info.messageId };
+      }
+      return { to: input.to, subject: input.subject, sent: false, simulated: true };
+    },
+  };
+
+  const knowledgeService: NodeServices['knowledge'] = {
+    async search(input: KnowledgeSearchInput): Promise<KnowledgeSearchResult> {
+      return rankKnowledge(knowledge, input.query, input.limit ?? 3);
+    },
+  };
+
+  return { http, ai, whatsapp, memory, email, contacts, knowledge: knowledgeService };
 }

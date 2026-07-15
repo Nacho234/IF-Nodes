@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
     "lint": "eslint src"
   },
   "dependencies": {
@@ -13,12 +14,17 @@
     "@ifnodes/node-definitions": "*",
     "@ifnodes/shared": "*",
     "@ifnodes/workflow-core": "*",
+    "nodemailer": "^9.0.3",
+    "pg": "^8.22.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "@types/nodemailer": "^8.0.1",
+    "@types/pg": "^8.20.0",
     "eslint": "^9.28.0",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.33.0"
+    "typescript-eslint": "^8.33.0",
+    "vitest": "^3.2.0"
   }
 }

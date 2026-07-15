@@ -30,6 +30,14 @@ import { EnvironmentsService } from './environments/environments.service';
 import { UsersController } from './users/users.controller';
 import { TemplatesController } from './templates/templates.controller';
 import { HealthController } from './health/health.controller';
+import { CopilotController } from './copilot/copilot.controller';
+import { CopilotService } from './copilot/copilot.service';
+import { KnowledgeController } from './knowledge/knowledge.controller';
+import { KnowledgeService } from './knowledge/knowledge.service';
+import { ContactsController } from './contacts/contacts.controller';
+import { CampaignsController } from './campaigns/campaigns.controller';
+import { CampaignsService } from './campaigns/campaigns.service';
+import { ConversationsController } from './conversations/conversations.controller';
 
 @Module({
   imports: [
@@ -52,6 +60,11 @@ import { HealthController } from './health/health.controller';
     UsersController,
     TemplatesController,
     HealthController,
+    CopilotController,
+    KnowledgeController,
+    ContactsController,
+    CampaignsController,
+    ConversationsController,
   ],
   providers: [
     PrismaService,
@@ -69,6 +82,9 @@ import { HealthController } from './health/health.controller';
     VersionsService,
     ExportsService,
     EnvironmentsService,
+    CopilotService,
+    KnowledgeService,
+    CampaignsService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

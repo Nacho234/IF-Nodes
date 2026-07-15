@@ -36,6 +36,13 @@ export class ExportsController {
     return this.exports.generate(workflowId, query.versionId, request.user);
   }
 
+  @Post('projects/:projectId/export')
+  @HttpCode(201)
+  @RequirePermission('exports.create')
+  generateProject(@Param('projectId') projectId: string, @Req() request: AuthenticatedRequest) {
+    return this.exports.generateProject(projectId, request.user);
+  }
+
   @Get('exports/:id/download')
   @RequirePermission('exports.read')
   async download(@Param('id') id: string, @Res() res: Response) {

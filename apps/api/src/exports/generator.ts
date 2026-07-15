@@ -210,6 +210,12 @@ export function envExample(plan: ExportPlan): string {
     '# HTTP_NODE_POLICY=block-private',
     '# HTTP_NODE_ALLOWED_HOSTS=',
     '',
+    '# ── Persistencia (opcional) ──',
+    '# Sin DATABASE_URL: memoria y contactos viven en el proceso (se pierden al reiniciar).',
+    '# Con una URL de Postgres/Supabase: memoria y contactos PERSISTEN (producción).',
+    '# El runtime crea sus tablas (ifn_*) solo al arrancar.',
+    '# DATABASE_URL=postgresql://user:pass@host:5432/dbname',
+    '',
   ];
   if (plan.envVars.length > 0) {
     lines.push('# ── Requeridas por este flujo ──');
@@ -224,7 +230,7 @@ export function gitignore(): string {
   return ['node_modules/', '.env', '.env.*', '*.log', '.DS_Store', ''].join('\n');
 }
 
-export function readme(plan: ExportPlan): string {
+export function readme(plan: ExportPlan, flows?: { name: string; slug: string }[]): string {
   const envList =
     plan.envVars.length > 0
       ? plan.envVars.map((v) => `- \`${v.name}\` — ${v.hint}`).join('\n')
@@ -235,11 +241,24 @@ export function readme(plan: ExportPlan): string {
       : plan.manifest.entrypoints.includes('webhook')
         ? 'POST `/webhooks/<lo-que-sea>` con el cuerpo JSON'
         : 'POST `/run` con el cuerpo JSON como entrada del disparador';
+  const isProject = Boolean(flows && flows.length > 0);
+  const source = isProject ? 'workflow/flows.json (todos los flujos del proyecto)' : 'workflow/workflow.json';
+  const flowsSection = isProject
+    ? `
+## Flujos incluidos
+
+${flows!.map((f) => `- **${f.name}** (\`${f.slug}\`)`).join('\n')}
+
+El runtime **orquesta el proyecto completo**: rutea la entrada al flujo inbound, expone
+las campañas por contacto y corre los flujos programados por cron.
+`
+    : '';
+  const campaignSlug = flows?.[0]?.slug;
   return `# ${plan.manifest.project}
 
-Runtime independiente generado por **IF Nodes** (workflow v${plan.manifest.workflowVersion}).
-Interpreta \`workflow/workflow.json\` con un motor genérico. No incluye el editor ni datos internos.
-
+Runtime independiente generado por **IF Nodes**.
+Interpreta \`${source}\` con un motor genérico. No incluye el editor ni datos internos.
+${flowsSection}
 ## Requisitos
 
 - Node.js 20+ (o Docker)
@@ -248,7 +267,8 @@ Interpreta \`workflow/workflow.json\` con un motor genérico. No incluye el edit
 
 ${envList}
 
-Copiá \`.env.example\` a \`.env\` y completá los valores.
+Copiá \`.env.example\` a \`.env\` y completá los valores. Definí \`DATABASE_URL\` (Postgres/Supabase)
+para que la memoria de conversación y los contactos **persistan** en tu propia base.
 
 ## Correr localmente
 
@@ -262,14 +282,27 @@ El servicio escucha en \`process.env.PORT\` (o 3000).
 ## Endpoints
 
 - \`GET /health\`, \`GET /health/live\`, \`GET /health/ready\`
-- Entrada del flujo: ${entry}
+- \`GET /flows\` — lista los flujos y sus disparadores
+- Entrada del bot: ${entry}
+- \`POST /run\` — ejecuta el flujo inbound (o \`?flow=<slug>\` para uno específico)
+- \`POST /campaigns/run\` — lanza una campaña por contacto (fan-out)
 
-Ejemplo:
+Ejemplo — mensaje entrante:
 
 \`\`\`bash
 curl -X POST http://localhost:3000/run -H 'content-type: application/json' \\
   -d '{"text":"hola"}'
 \`\`\`
+
+Ejemplo — lanzar una campaña (filtra contactos por estado/tag; \`dryRun\` solo cuenta):
+
+\`\`\`bash
+curl -X POST http://localhost:3000/campaigns/run -H 'content-type: application/json' \\
+  -d '{${campaignSlug ? `"flow":"${campaignSlug}",` : ''}"status":"new","hasPhone":true,"staggerMs":1000,"dryRun":true}'
+\`\`\`
+
+Los flujos con disparador **Programado (cron)** se ejecutan solos según su cadencia
+(no requieren llamada externa; el scheduler va incluido en el runtime).
 
 ## Docker
 

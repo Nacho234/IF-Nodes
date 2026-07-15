@@ -10,6 +10,7 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@ifnodes/copilot": "*",
     "@ifnodes/database": "*",
     "@ifnodes/node-definitions": "*",
     "@ifnodes/shared": "*",

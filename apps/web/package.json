@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
+    "@ifnodes/copilot": "*",
     "@ifnodes/node-definitions": "*",
     "@ifnodes/shared": "*",
     "@radix-ui/react-dialog": "^1.1.13",

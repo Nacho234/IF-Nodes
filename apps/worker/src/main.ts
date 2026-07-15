@@ -22,6 +22,7 @@ import {
 import { executeWorkflow, type StepRecord } from '@ifnodes/workflow-core';
 import { decryptSecret } from '@ifnodes/shared/dist/crypto';
 import { buildServices } from './services';
+import { startScheduler } from './scheduler';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
@@ -216,8 +217,13 @@ async function main() {
 
   worker.on('ready', () => log('info', `Worker escuchando la cola "${EXECUTIONS_QUEUE}"`));
 
+  // Scheduler de disparadores programados (cron)
+  const scheduler = startScheduler(prisma, REDIS_URL, log);
+  log('info', 'Scheduler de cron iniciado');
+
   const shutdown = async () => {
     log('info', 'Apagando worker…');
+    await scheduler.stop();
     await worker.close();
     await prisma.$disconnect();
     process.exit(0);

@@ -34,4 +34,11 @@ export class WorkflowsController {
   validate(@Param('id') id: string) {
     return this.workflows.validate(id);
   }
+
+  /** Checklist de puesta en marcha: qué falta conectar/cargar para que funcione. */
+  @Get(':id/readiness')
+  @RequirePermission('workflows.read')
+  readiness(@Param('id') id: string) {
+    return this.workflows.readiness(id);
+  }
 }

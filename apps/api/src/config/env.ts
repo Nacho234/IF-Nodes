@@ -34,12 +34,36 @@ const envSchema = z.object({
     .default('false')
     .transform((value) => value === 'true'),
   REDIS_URL: z.string().optional().default(''),
+
+  // ── IF Copilot ──────────────────────────────────────────────
+  COPILOT_PROVIDER: z.enum(['claude', 'dev']).optional().default('claude'),
+  COPILOT_MODEL: z.string().optional().default('claude-opus-4-8'),
+  /** Clave dedicada del copilot; si falta, cae a ANTHROPIC_API_KEY. */
+  COPILOT_ANTHROPIC_API_KEY: z.string().optional().default(''),
+  ANTHROPIC_API_KEY: z.string().optional().default(''),
+  COPILOT_THINKING: z
+    .string()
+    .optional()
+    .default('false')
+    .transform((value) => value === 'true'),
+  COPILOT_MAX_TOKENS: z.coerce.number().int().positive().max(64_000).default(4096),
 });
+
+export interface CopilotConfig {
+  provider: 'claude' | 'dev';
+  model: string;
+  apiKey: string;
+  thinking: boolean;
+  maxTokens: number;
+  /** true si hay clave y proveedor real (habla con Claude). */
+  isReal: boolean;
+}
 
 export type Env = z.infer<typeof envSchema> & {
   isProduction: boolean;
   devLoginEnabled: boolean;
   googleConfigured: boolean;
+  copilot: CopilotConfig;
 };
 
 let cached: Env | null = null;
@@ -54,12 +78,21 @@ export function loadEnv(): Env {
     throw new Error(`Configuración de entorno inválida:\n${detail}\nRevisá .env (ver .env.example).`);
   }
   const env = parsed.data;
+  const copilotApiKey = env.COPILOT_ANTHROPIC_API_KEY || env.ANTHROPIC_API_KEY;
   cached = {
     ...env,
     isProduction: env.NODE_ENV === 'production',
     // El dev-login se ignora por completo en producción (ver SECURITY.md)
     devLoginEnabled: env.AUTH_DEV_LOGIN && env.NODE_ENV !== 'production',
     googleConfigured: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+    copilot: {
+      provider: env.COPILOT_PROVIDER,
+      model: env.COPILOT_MODEL,
+      apiKey: copilotApiKey,
+      thinking: env.COPILOT_THINKING,
+      maxTokens: env.COPILOT_MAX_TOKENS,
+      isReal: env.COPILOT_PROVIDER === 'claude' && Boolean(copilotApiKey),
+    },
   };
   return cached;
 }

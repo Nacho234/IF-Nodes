@@ -184,6 +184,8 @@ export interface ExportResult {
     healthEndpoint: string;
   };
   requiredEnvVars: { name: string; hint: string }[];
+  /** Presente en exports de proyecto completo (multi-flow). */
+  flows?: { name: string; slug: string }[];
 }
 
 export interface ExportRow {
