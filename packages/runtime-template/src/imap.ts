@@ -10,7 +10,7 @@
  */
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import { parseInboundEmail } from '@ifnodes/node-definitions';
+import { parseInboundEmail, shouldReplyToEmail } from '@ifnodes/node-definitions';
 import type { EmailIncomingMessage } from '@ifnodes/node-definitions';
 
 export interface ImapConfig {
@@ -43,11 +43,25 @@ export function imapConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ImapCon
   };
 }
 
-/** Convierte un mail crudo (RFC822) al formato interno del bot. */
+/**
+ * Convierte un mail crudo (RFC822) al formato interno del bot.
+ * Devuelve null si NO hay que contestarlo (auto-respuesta, rebote, lista, spam):
+ * responder eso desata bucles infinitos y le abre hilos falsos al CRM.
+ */
 export async function messageFromSource(source: Buffer): Promise<EmailIncomingMessage | null> {
   const mail = await simpleParser(source);
   const from = mail.from?.value?.[0];
   if (!from?.address) return null;
+
+  // Los headers estándar (RFC 3834 Auto-Submitted, Precedence, Return-Path) son
+  // lo único confiable para distinguir una persona de una máquina.
+  const headers: Record<string, string> = {};
+  for (const [k, v] of mail.headers) {
+    if (typeof v === 'string') headers[k.toLowerCase()] = v;
+    else if (v && typeof v === 'object' && 'text' in v) headers[k.toLowerCase()] = String((v as { text: unknown }).text);
+  }
+  const decision = shouldReplyToEmail({ from: from.address, subject: mail.subject ?? '', headers });
+  if (!decision.reply) return null;
 
   return parseInboundEmail({
     from: from.name ? `${from.name} <${from.address}>` : from.address,
@@ -115,7 +129,8 @@ export class ImapPoller {
           try {
             const parsed = msg.source ? await messageFromSource(msg.source) : null;
             if (!parsed) {
-              this.log('warn', 'Mail sin remitente legible, se saltea', { uid: msg.uid });
+              // Auto-respuesta, rebote, lista o sin remitente: se marca leído y no se contesta.
+              this.log('info', 'Mail ignorado (automático o sin remitente)', { uid: msg.uid });
             } else {
               await this.onMessage(parsed);
               procesados += 1;

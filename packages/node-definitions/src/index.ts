@@ -36,4 +36,5 @@ export { contactFindNode } from './nodes/contacts/find';
 export { googleCalendarNode } from './nodes/integrations/google-calendar';
 export { parseWhatsAppWebhook } from './whatsapp/parse-webhook';
 export { parseInboundEmail, parseAddress, stripQuotedReply, htmlToText } from './email/parse-inbound';
+export { shouldReplyToEmail, type ReplyDecision, type InboundHeaders } from './email/should-reply';
 export { sendWhatsAppText } from './whatsapp/cloud-api';

@@ -28,6 +28,7 @@ import type { CredentialManifest } from './services';
 import { createRuntimeStore, type ContactSeed, type ConversationSeed } from './store';
 import { runCampaign } from './campaigns';
 import { CronScheduler } from './cron';
+import { checkApiKey, checkWhatsAppSignature, checkEmailWebhookToken, RateLimiter } from './security';
 import { ImapPoller, imapConfigFromEnv } from './imap';
 
 /** Campos aceptados por POST /campaigns/run (el filtro va plano, ver README). */
@@ -64,7 +65,11 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-async function readBody(req: IncomingMessage): Promise<unknown> {
+/**
+ * Lee el cuerpo devolviendo TAMBIÉN los bytes crudos: la firma de Meta es un HMAC
+ * sobre el cuerpo exacto, así que re-serializar el JSON parseado la invalida.
+ */
+async function readBody(req: IncomingMessage): Promise<{ raw: Buffer; json: unknown }> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
@@ -72,12 +77,13 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
     if (size > 1_000_000) throw new Error('Payload demasiado grande');
     chunks.push(chunk as Buffer);
   }
-  if (chunks.length === 0) return {};
-  const text = Buffer.concat(chunks).toString('utf8');
+  const raw = Buffer.concat(chunks);
+  if (raw.length === 0) return { raw, json: {} };
+  const text = raw.toString('utf8');
   try {
-    return JSON.parse(text);
+    return { raw, json: JSON.parse(text) };
   } catch {
-    return { body: text };
+    return { raw, json: { body: text } };
   }
 }
 
@@ -125,6 +131,18 @@ async function main(): Promise<void> {
   const inbound = inboundFlow(project);
   const wa = whatsappFlow(project);
   const mail = emailFlow(project);
+
+  // Un runtime abierto en silencio es peor que uno que grita: si falta una defensa, se avisa.
+  if (!process.env.RUNTIME_API_KEY) {
+    log('warn', '⚠ SIN RUNTIME_API_KEY: /conversations/*, /campaigns/run y /run quedan ABIERTOS a cualquiera que conozca la URL. Definila ya.');
+  }
+  if (wa && !process.env.WHATSAPP_APP_SECRET) {
+    log('warn', '⚠ SIN WHATSAPP_APP_SECRET: no se verifica la firma de Meta, cualquiera puede fingir un mensaje entrante.');
+  }
+  if (mail && !process.env.EMAIL_WEBHOOK_TOKEN) {
+    log('warn', '⚠ SIN EMAIL_WEBHOOK_TOKEN: /webhooks/email acepta mails de cualquiera. (No aplica si solo entrás por IMAP.)');
+  }
+
   log('info', 'Proyecto cargado', {
     project: manifest.project,
     flows: project.flows.map((f) => ({ slug: f.slug, trigger: f.triggerType })),
@@ -132,6 +150,7 @@ async function main(): Promise<void> {
   });
 
   // Scheduler: registra un job cron por cada flujo "Programado"
+  const rateLimiter = new RateLimiter();
   const scheduler = new CronScheduler();
   for (const flow of scheduleFlows(project)) {
     const cfg = scheduleConfig(flow);
@@ -177,10 +196,28 @@ async function main(): Promise<void> {
     });
   });
 
+  /** Endpoints que exponen o mueven datos: exigen RUNTIME_API_KEY. */
+  const PROTEGIDOS = ['/conversations/reply', '/conversations/history', '/campaigns/run', '/run', '/flows'];
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const path = url.pathname;
     const method = req.method ?? 'GET';
+
+    // Freno por IP: un bucle o un script no puede disparar miles de ejecuciones (y de llamadas a la IA).
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'desconocida';
+    if (!path.startsWith('/health') && rateLimiter.limited(ip)) {
+      return send(res, 429, { error: 'rate_limited' });
+    }
+
+    // Operación: sin la API key no se lee ni se manda nada.
+    if (PROTEGIDOS.some((p) => path === p || path.startsWith(p + '/'))) {
+      const motivo = checkApiKey(req.headers);
+      if (motivo) {
+        log('warn', 'Request rechazado', { path, motivo, ip });
+        return send(res, 401, { error: 'unauthorized', message: 'Requiere el header Authorization: Bearer <RUNTIME_API_KEY>.' });
+      }
+    }
 
     // Health checks
     if (path === '/health' && method === 'GET') {
@@ -217,10 +254,18 @@ async function main(): Promise<void> {
     // Webhook de WhatsApp: parsear el payload de Meta y ejecutar el flujo inbound
     if (path === '/webhooks/whatsapp' && method === 'POST' && wa) {
       let payload: unknown;
+      let raw: Buffer;
       try {
-        payload = await readBody(req);
+        ({ json: payload, raw } = await readBody(req));
       } catch {
         return send(res, 413, { error: 'payload_too_large' });
+      }
+      // Meta firma cada webhook con el App Secret. Sin verificarlo, cualquiera
+      // postea un mensaje inventado y el bot lo procesa como real.
+      const malaFirma = checkWhatsAppSignature(req.headers['x-hub-signature-256'], raw);
+      if (malaFirma) {
+        log('warn', 'Webhook de WhatsApp rechazado', { motivo: malaFirma });
+        return send(res, 401, { error: 'invalid_signature' });
       }
       const messages = parseWhatsAppWebhook(payload);
       for (const message of messages) {
@@ -233,9 +278,15 @@ async function main(): Promise<void> {
 
     // Mail entrante: cualquier transporte (Gmail, IMAP, proveedor) postea el mail crudo acá.
     if (path === '/webhooks/email' && method === 'POST' && mail) {
+      // El proveedor de mail no puede mandar nuestra API key: el token va en la URL.
+      const malToken = checkEmailWebhookToken(url);
+      if (malToken) {
+        log('warn', 'Webhook de mail rechazado', { motivo: malToken });
+        return send(res, 401, { error: 'invalid_token' });
+      }
       let payload: unknown;
       try {
-        payload = await readBody(req);
+        payload = (await readBody(req)).json;
       } catch {
         return send(res, 413, { error: 'payload_too_large' });
       }
@@ -253,8 +304,8 @@ async function main(): Promise<void> {
     if (path === '/conversations/reply' && method === 'POST') {
       let body: Record<string, unknown> = {};
       try {
-        const raw = await readBody(req);
-        if (raw && typeof raw === 'object') body = raw as Record<string, unknown>;
+        const { json } = await readBody(req);
+        if (json && typeof json === 'object') body = json as Record<string, unknown>;
       } catch {
         return send(res, 413, { error: 'payload_too_large' });
       }
@@ -305,8 +356,8 @@ async function main(): Promise<void> {
       if (flows.length === 0) return send(res, 404, { error: 'no_campaign_flow' });
       let body: Record<string, unknown> = {};
       try {
-        const raw = await readBody(req);
-        if (raw && typeof raw === 'object') body = raw as Record<string, unknown>;
+        const { json } = await readBody(req);
+        if (json && typeof json === 'object') body = json as Record<string, unknown>;
       } catch {
         return send(res, 413, { error: 'payload_too_large' });
       }
@@ -342,8 +393,8 @@ async function main(): Promise<void> {
       if (!flow) return send(res, 404, { error: slug ? 'flow_not_found' : 'no_inbound_flow' });
       let input: Record<string, unknown>;
       try {
-        const body = await readBody(req);
-        input = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : { body };
+        const { json } = await readBody(req);
+        input = json && typeof json === 'object' && !Array.isArray(json) ? (json as Record<string, unknown>) : { body: json };
       } catch {
         return send(res, 413, { error: 'payload_too_large' });
       }
