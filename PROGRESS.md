@@ -4,6 +4,11 @@ Estados: ✅ hecho y verificado · 🔶 hecho, verificación parcial (ver nota) 
 
 Última actualización: 2026-07-11 (octava tanda: **Fase 10** — variables por entorno + tests E2E Playwright, que cazaron un bug crítico del constructor).
 
+> 📌 **Estado actual (2026-07-15) en `HANDOFF.md` §8**: después de esto se hicieron el IF
+> Copilot, los nodos de agentes avanzados (memoria, agente IA, RAG, cron, email, contactos,
+> handoff, campañas, calendar), la Opción B (export de proyecto completo que corre en el
+> stack del cliente) y el cliente FePI. Lo de abajo es historia previa.
+
 ## Fase 10 — Calidad (en curso)
 
 - ✅ Variables por entorno: API (crear/editar/borrar, secretas cifradas AES-GCM), worker descifra para `{{environment.X}}`, UI por proyecto con pestañas Dev/Testing/Prod — verificado E2E (plana + secreta resueltas)
