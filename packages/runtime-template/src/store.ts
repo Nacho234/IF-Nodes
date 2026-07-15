@@ -22,6 +22,17 @@ export interface ContactListFilter {
   limit?: number;
 }
 
+/** Contacto que viaja en el export (contacts.json) para sembrar el CRM del cliente. */
+export interface ContactSeed {
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  status?: string;
+  tags?: string[];
+  notes?: string | null;
+  data?: Record<string, unknown> | null;
+}
+
 export interface RuntimeStore {
   memoryLoad(channel: string, contact: string, limit: number): Promise<{ turns: ConversationTurn[]; status: string }>;
   memorySave(channel: string, contact: string, role: string, text: string): Promise<void>;
@@ -29,6 +40,8 @@ export interface RuntimeStore {
   contactUpsert(input: ContactUpsertInput): Promise<ContactRecord>;
   contactFind(identity: ContactIdentity): Promise<ContactRecord | null>;
   listContacts(filter: ContactListFilter): Promise<ContactRecord[]>;
+  /** Carga inicial de contactos (solo si el CRM está vacío). Idempotente. */
+  seedContacts(contacts: ContactSeed[]): Promise<{ seeded: number; skipped: boolean }>;
   init?(): Promise<void>;
 }
 
@@ -98,14 +111,60 @@ export class InMemoryStore implements RuntimeStore {
     this.contacts.push(record);
     return record;
   }
+  async seedContacts(contacts: ContactSeed[]) {
+    if (this.contacts.length > 0) return { seeded: 0, skipped: true };
+    let seeded = 0;
+    for (const c of contacts) {
+      if (!c.phone && !c.email) continue;
+      // Reusa el upsert para respetar el dedup por teléfono/email de la semilla.
+      // La semilla viene de la DB (null); el upsert espera undefined.
+      const before = this.contacts.length;
+      await this.contactUpsert({
+        name: c.name ?? undefined,
+        phone: c.phone ?? undefined,
+        email: c.email ?? undefined,
+        status: c.status ?? 'new',
+        tags: c.tags ?? [],
+        notes: c.notes ?? undefined,
+        data: c.data ?? undefined,
+      });
+      if (this.contacts.length > before) seeded += 1;
+    }
+    return { seeded, skipped: false };
+  }
 }
 
 /* ── Postgres / Supabase (persistente) ──────────────────────── */
 
+/**
+ * SSL para la conexión. Los Postgres gestionados (Supabase, Neon, RDS, Railway)
+ * exigen TLS; localhost normalmente no. Reglas: `sslmode=disable` o
+ * `RUNTIME_DB_SSL=false` → sin SSL; localhost sin sslmode → sin SSL; el resto
+ * → SSL (rejectUnauthorized false para aceptar el cert del pooler gestionado).
+ */
+export function resolveSsl(connectionString: string): false | { rejectUnauthorized: boolean } {
+  const force = (process.env.RUNTIME_DB_SSL ?? '').toLowerCase();
+  if (force === 'false' || force === '0' || force === 'disable') return false;
+  if (force === 'true' || force === '1' || force === 'require') return { rejectUnauthorized: false };
+  let host = '';
+  let sslmode = '';
+  try {
+    const url = new URL(connectionString);
+    host = url.hostname;
+    sslmode = url.searchParams.get('sslmode') ?? '';
+  } catch {
+    /* string no-URL: caemos a la heurística por defecto */
+  }
+  if (sslmode === 'disable') return false;
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '';
+  if (isLocal && !sslmode) return false;
+  return { rejectUnauthorized: false };
+}
+
 export class PostgresStore implements RuntimeStore {
   private pool: Pool;
   constructor(connectionString: string) {
-    this.pool = new Pool({ connectionString, max: 5 });
+    this.pool = new Pool({ connectionString, max: 5, ssl: resolveSsl(connectionString) });
   }
 
   async init(): Promise<void> {
@@ -233,6 +292,44 @@ export class PostgresStore implements RuntimeStore {
       [input.name ?? null, input.phone ?? null, input.email ?? null, input.status ?? 'new', input.tags ?? [], input.notes ?? null, input.data ?? null],
     );
     return this.rowToContact(r.rows[0]);
+  }
+  /**
+   * Siembra el CRM SOLO si está vacío: una vez desplegado, el estado de los
+   * contactos lo maneja el bot (contacted/replied/…), y un redeploy no debe
+   * pisarlo. Inserta por lotes; `ON CONFLICT DO NOTHING` cubre teléfonos o
+   * emails repetidos dentro de la propia semilla.
+   */
+  async seedContacts(contacts: ContactSeed[]) {
+    const existing = await this.pool.query<{ n: string }>('SELECT COUNT(*)::text AS n FROM ifn_contacts');
+    if (Number(existing.rows[0]?.n ?? '0') > 0) return { seeded: 0, skipped: true };
+
+    const usable = contacts.filter((c) => c.phone || c.email);
+    const BATCH = 500;
+    let seeded = 0;
+    for (let i = 0; i < usable.length; i += BATCH) {
+      const batch = usable.slice(i, i + BATCH);
+      const params: unknown[] = [];
+      const rows = batch.map((c) => {
+        const base = params.length;
+        params.push(
+          c.name ?? null,
+          c.phone ?? null,
+          c.email ?? null,
+          c.status ?? 'new',
+          c.tags ?? [],
+          c.notes ?? null,
+          c.data ?? null,
+        );
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
+      });
+      const r = await this.pool.query(
+        `INSERT INTO ifn_contacts (name, phone, email, status, tags, notes, data)
+         VALUES ${rows.join(', ')} ON CONFLICT DO NOTHING`,
+        params,
+      );
+      seeded += r.rowCount ?? 0;
+    }
+    return { seeded, skipped: false };
   }
 }
 

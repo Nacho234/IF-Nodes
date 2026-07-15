@@ -24,9 +24,21 @@ import {
   type LoadedProject,
 } from './runtime';
 import type { CredentialManifest } from './services';
-import { createRuntimeStore } from './store';
+import { createRuntimeStore, type ContactSeed } from './store';
 import { runCampaign } from './campaigns';
 import { CronScheduler } from './cron';
+
+/** Campos aceptados por POST /campaigns/run (el filtro va plano, ver README). */
+const CAMPAIGN_BODY_KEYS = new Set([
+  'flow',
+  'status',
+  'tags',
+  'hasPhone',
+  'hasEmail',
+  'limit',
+  'staggerMs',
+  'dryRun',
+]);
 
 const WORKFLOW_DIR = resolve(process.cwd(), 'workflow');
 
@@ -80,6 +92,7 @@ async function main(): Promise<void> {
   const bundles = loadFlowBundles();
   const credentials = tryReadJson<CredentialManifest>('credentials.json', {});
   const knowledge = tryReadJson<{ id: string; title: string | null; content: string }[]>('knowledge.json', []);
+  const contactSeed = tryReadJson<ContactSeed[]>('contacts.json', []);
 
   const missing = manifest.requiredEnvironmentVariables.filter((name) => !process.env[name]);
   if (missing.length > 0) log('warn', 'Faltan variables de entorno requeridas', { missing });
@@ -91,6 +104,12 @@ async function main(): Promise<void> {
     log('info', 'Persistencia: base de datos conectada (memoria y contactos persistentes)');
   } else {
     log('info', 'Persistencia: en memoria del proceso (efímera). Definí DATABASE_URL para persistir.');
+  }
+
+  if (contactSeed.length > 0) {
+    const { seeded, skipped } = await store.seedContacts(contactSeed);
+    if (skipped) log('info', 'CRM ya poblado: se omite la carga inicial de contactos', { disponibles: contactSeed.length });
+    else log('info', 'CRM sembrado con la carga inicial de contactos', { seeded, disponibles: contactSeed.length });
   }
 
   const project: LoadedProject = loadProject(bundles, manifest, credentials, knowledge, store);
@@ -192,6 +211,16 @@ async function main(): Promise<void> {
         if (raw && typeof raw === 'object') body = raw as Record<string, unknown>;
       } catch {
         return send(res, 413, { error: 'payload_too_large' });
+      }
+      // Una clave desconocida (typo, o filtro anidado) NO puede degradar a
+      // "sin filtro": eso le escribiría a TODOS los contactos. Mejor 400.
+      const unknown = Object.keys(body).filter((k) => !CAMPAIGN_BODY_KEYS.has(k));
+      if (unknown.length > 0) {
+        return send(res, 400, {
+          error: 'unknown_fields',
+          message: `Campos no reconocidos: ${unknown.join(', ')}. El filtro va plano en el cuerpo.`,
+          allowed: [...CAMPAIGN_BODY_KEYS],
+        });
       }
       const flow = typeof body.flow === 'string' ? flowBySlug(project, body.flow) : flows[0];
       if (!flow) return send(res, 404, { error: 'flow_not_found' });

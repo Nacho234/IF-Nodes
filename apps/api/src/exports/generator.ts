@@ -215,6 +215,11 @@ export function envExample(plan: ExportPlan): string {
     '# Con una URL de Postgres/Supabase: memoria y contactos PERSISTEN (producción).',
     '# El runtime crea sus tablas (ifn_*) solo al arrancar.',
     '# DATABASE_URL=postgresql://user:pass@host:5432/dbname',
+    '#',
+    '# Supabase: usá la conexión DIRECTA (Database → Connection string → URI, puerto 5432),',
+    '# NO el pooler de transacciones (6543). El SSL se activa solo para hosts remotos;',
+    '# forzalo con RUNTIME_DB_SSL=true|false si hace falta.',
+    '# RUNTIME_DB_SSL=true',
     '',
   ];
   if (plan.envVars.length > 0) {
@@ -227,7 +232,16 @@ export function envExample(plan: ExportPlan): string {
 }
 
 export function gitignore(): string {
-  return ['node_modules/', '.env', '.env.*', '*.log', '.DS_Store', ''].join('\n');
+  return [
+    'node_modules/',
+    '.env',
+    '.env.*',
+    '*.log',
+    '.DS_Store',
+    '# Datos personales de los contactos: no versionar.',
+    'workflow/contacts.json',
+    '',
+  ].join('\n');
 }
 
 export function readme(plan: ExportPlan, flows?: { name: string; slug: string }[]): string {

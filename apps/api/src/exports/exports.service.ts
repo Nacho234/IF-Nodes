@@ -280,6 +280,13 @@ export class ExportsService {
       });
       await writeFile(resolve(projectDir, 'workflow', 'knowledge.json'), JSON.stringify(knowledge, null, 2));
 
+      // Semilla del CRM: el runtime la carga solo si su base está vacía.
+      const contacts = await this.prisma.client.contact.findMany({
+        where: { projectId },
+        select: { name: true, phone: true, email: true, status: true, tags: true, notes: true, data: true },
+      });
+      await writeFile(resolve(projectDir, 'workflow', 'contacts.json'), JSON.stringify(contacts, null, 2));
+
       // 3. Archivos del proyecto
       await writeFile(resolve(projectDir, 'package.json'), packageJson(plan));
       await writeFile(resolve(projectDir, 'Dockerfile'), dockerfile());
