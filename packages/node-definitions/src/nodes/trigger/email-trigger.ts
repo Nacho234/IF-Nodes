@@ -66,12 +66,16 @@ export const emailTriggerNode = defineNode<Config, unknown, EmailIncomingMessage
     'El runtime exportado expone POST /webhooks/email. El transporte (Gmail, IMAP o un proveedor) postea ahí el mail crudo y el runtime lo normaliza. Usá el Simulador para probar sin transporte.',
   async execute({ config, input }) {
     const raw = (input ?? {}) as Partial<EmailIncomingMessage>;
-    const real = typeof raw.text === 'string' && raw.text.length > 0;
+    // "Es real" se decide por el REMITENTE, no por el texto: un mail que solo trae
+    // un adjunto llega sin cuerpo, y mirando el texto se descartaría el mail entero
+    // (el bot le contestaría a la dirección de ejemplo en vez de a la agencia).
+    const real = typeof raw.from === 'string' && raw.from.includes('@');
+    const text = real ? (raw.text ?? '') : config.sampleText;
     return {
       output: {
-        text: real ? (raw.text as string) : config.sampleText,
+        text: text || (real ? '[el contacto mandó un mail sin texto, quizás solo un adjunto]' : text),
         subject: (real ? raw.subject : undefined) ?? config.sampleSubject,
-        from: ((real ? raw.from : undefined) ?? config.sampleFrom).toLowerCase(),
+        from: (real ? (raw.from as string) : config.sampleFrom).toLowerCase(),
         name: (real ? raw.name : undefined) ?? config.sampleName,
         messageId: raw.messageId ?? '',
         inReplyTo: raw.inReplyTo ?? '',

@@ -19,6 +19,17 @@ export interface WhatsAppIncomingMessage extends Record<string, unknown> {
 }
 
 /**
+ * Qué poner como texto cuando el mensaje no trae ninguno. El bot no puede escuchar
+ * ni ver: al menos tiene que saber QUÉ le mandaron para contestar con sentido.
+ */
+const MEDIA_PLACEHOLDER: Record<string, string> = {
+  audio: '[el contacto mandó una nota de voz, sin texto]',
+  image: '[el contacto mandó una imagen, sin texto]',
+  location: '[el contacto mandó una ubicación]',
+  button: '[el contacto tocó un botón, sin texto]',
+};
+
+/**
  * Mensaje de WhatsApp entrante. En el builder lo alimenta el Simulador
  * (mismo formato interno que usará el proveedor real de WhatsApp Cloud
  * en Fase 7 — los nodos siguientes no distinguen simulado de real).
@@ -53,13 +64,20 @@ export const whatsappTriggerNode = defineNode<Config, unknown, WhatsAppIncomingM
     'Usá el Simulador del constructor para conversar con el bot. Los valores de ejemplo se usan cuando se ejecuta sin simulador (botón Ejecutar).',
   async execute({ config, input }) {
     const raw = (input ?? {}) as Partial<WhatsAppIncomingMessage>;
-    const hasRealInput = typeof raw.text === 'string' && raw.text.length > 0;
+    // "Es real" se decide por el TELÉFONO, no por el texto: una nota de voz o una
+    // imagen sin epígrafe llegan sin texto, y antes eso hacía que se descartara el
+    // mensaje entero — el bot le respondía al teléfono de ejemplo, no a la agencia.
+    const hasRealInput = typeof raw.phone === 'string' && raw.phone.length > 0;
+    const messageType = raw.messageType ?? 'text';
+    const text = hasRealInput ? (raw.text ?? '') : config.sampleText;
     return {
       output: {
-        text: hasRealInput ? (raw.text as string) : config.sampleText,
-        phone: (hasRealInput ? raw.phone : undefined) ?? config.samplePhone,
+        // Sin texto no se puede responder a ciegas: se describe qué mandó, para que
+        // el flujo pueda contestar algo con sentido (o derivarlo a una persona).
+        text: text || (hasRealInput ? MEDIA_PLACEHOLDER[messageType] ?? '[el contacto mandó un adjunto sin texto]' : text),
+        phone: hasRealInput ? (raw.phone as string) : config.samplePhone,
         name: (hasRealInput ? raw.name : undefined) ?? config.sampleName,
-        messageType: raw.messageType ?? 'text',
+        messageType,
         channel: 'whatsapp',
         receivedAt: new Date().toISOString(),
       },
