@@ -12,7 +12,14 @@ describe('imapConfigFromEnv', () => {
 
   it('valores por defecto de DonWeb/Ferozo: 993 con SSL', () => {
     const c = imapConfigFromEnv(base)!;
-    expect(c).toMatchObject({ host: 'usuario.ferozo.com', port: 993, secure: true, mailbox: 'INBOX', pollSeconds: 60 });
+    expect(c).toMatchObject({
+      host: 'usuario.ferozo.com', port: 993, secure: true,
+      mailbox: 'INBOX', failedMailbox: 'INBOX.Fallidos', pollSeconds: 60,
+    });
+  });
+
+  it('la carpeta de fallidos se puede configurar', () => {
+    expect(imapConfigFromEnv({ ...base, IMAP_FAILED_MAILBOX: 'INBOX.Errores' })!.failedMailbox).toBe('INBOX.Errores');
   });
 
   it('el puerto 143 apaga SSL solo', () => {

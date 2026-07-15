@@ -43,7 +43,8 @@ export interface ConversationSeed {
 
 export interface RuntimeStore {
   memoryLoad(channel: string, contact: string, limit: number): Promise<{ turns: ConversationTurn[]; status: string }>;
-  memorySave(channel: string, contact: string, role: string, text: string): Promise<void>;
+  /** `at` preserva la fecha original (importar historial); si falta, es ahora. */
+  memorySave(channel: string, contact: string, role: string, text: string, at?: Date): Promise<void>;
   memorySetStatus(channel: string, contact: string, status: string): Promise<void>;
   contactUpsert(input: ContactUpsertInput): Promise<ContactRecord>;
   contactFind(identity: ContactIdentity): Promise<ContactRecord | null>;
@@ -73,7 +74,7 @@ export class InMemoryStore implements RuntimeStore {
     const k = this.key(channel, contact);
     return { turns: (this.turns.get(k) ?? []).slice(-limit), status: this.status.get(k) ?? 'open' };
   }
-  async memorySave(channel: string, contact: string, role: string, text: string) {
+  async memorySave(channel: string, contact: string, role: string, text: string, _at?: Date) {
     const k = this.key(channel, contact);
     const arr = this.turns.get(k) ?? [];
     arr.push({ role: role as ConversationTurn['role'], text });
@@ -219,18 +220,16 @@ export class PostgresStore implements RuntimeStore {
     const turns = rows.rows.reverse().map((r) => ({ role: r.role as ConversationTurn['role'], text: r.text }));
     return { turns, status: conv.rows[0]?.status ?? 'open' };
   }
-  async memorySave(channel: string, contact: string, role: string, text: string) {
+  async memorySave(channel: string, contact: string, role: string, text: string, at?: Date) {
     await this.pool.query(
-      `INSERT INTO ifn_conversations (channel, contact, last_message_at) VALUES ($1, $2, now())
-       ON CONFLICT (channel, contact) DO UPDATE SET last_message_at = now()`,
-      [channel, contact],
+      `INSERT INTO ifn_conversations (channel, contact, last_message_at) VALUES ($1, $2, COALESCE($3::timestamptz, now()))
+       ON CONFLICT (channel, contact) DO UPDATE SET last_message_at = GREATEST(ifn_conversations.last_message_at, EXCLUDED.last_message_at)`,
+      [channel, contact, at ?? null],
     );
-    await this.pool.query('INSERT INTO ifn_messages (channel, contact, role, text) VALUES ($1, $2, $3, $4)', [
-      channel,
-      contact,
-      role,
-      text,
-    ]);
+    await this.pool.query(
+      'INSERT INTO ifn_messages (channel, contact, role, text, created_at) VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, now()))',
+      [channel, contact, role, text, at ?? null],
+    );
   }
   async memorySetStatus(channel: string, contact: string, status: string) {
     await this.pool.query(

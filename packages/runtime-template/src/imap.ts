@@ -20,6 +20,8 @@ export interface ImapConfig {
   user: string;
   password: string;
   mailbox: string;
+  /** Carpeta donde van los mails que fallaron, para que no se pierdan en silencio. */
+  failedMailbox: string;
   pollSeconds: number;
 }
 
@@ -39,6 +41,7 @@ export function imapConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ImapCon
     user,
     password,
     mailbox: env.IMAP_MAILBOX?.trim() || 'INBOX',
+    failedMailbox: env.IMAP_FAILED_MAILBOX?.trim() || 'INBOX.Fallidos',
     pollSeconds: Math.max(Number(env.IMAP_POLL_SECONDS ?? 60) || 60, 15),
   };
 }
@@ -123,6 +126,12 @@ export class ImapPoller {
     let procesados = 0;
     try {
       await client.connect();
+      // La carpeta de fallidos tiene que existir antes de necesitarla.
+      try {
+        await client.mailboxCreate(this.config.failedMailbox);
+      } catch {
+        /* ya existe: es el caso normal */
+      }
       const lock = await client.getMailboxLock(this.config.mailbox);
       try {
         for await (const msg of client.fetch({ seen: false }, { source: true, uid: true })) {
@@ -138,11 +147,29 @@ export class ImapPoller {
             // Se marca leído incluso si no se pudo parsear: si no, se reintenta para siempre.
             await client.messageFlagsAdd({ uid: String(msg.uid) }, ['\\Seen'], { uid: true });
           } catch (error) {
-            // Un mail que falla no puede cortar la vuelta entera.
-            this.log('error', 'Falló el procesamiento de un mail', {
+            // Un mail que falla no puede cortar la vuelta entera. Y tampoco puede
+            // perderse: se mueve a una carpeta para que alguien lo mire. Marcarlo
+            // leído y seguir lo hacía desaparecer en silencio.
+            this.log('error', 'Falló el procesamiento de un mail: se mueve a la carpeta de fallidos', {
               uid: msg.uid,
+              carpeta: this.config.failedMailbox,
               error: error instanceof Error ? error.message : String(error),
             });
+            try {
+              await client.messageMove({ uid: String(msg.uid) }, this.config.failedMailbox, { uid: true });
+            } catch (moveError) {
+              // Si la carpeta no existe o el servidor no deja mover, al menos no
+              // reintentarlo para siempre: se marca leído y queda el log.
+              this.log('warn', 'No se pudo mover el mail fallido; queda leído en la bandeja', {
+                uid: msg.uid,
+                error: moveError instanceof Error ? moveError.message : String(moveError),
+              });
+              try {
+                await client.messageFlagsAdd({ uid: String(msg.uid) }, ['\\Seen'], { uid: true });
+              } catch {
+                /* la conexión ya se cayó; se reintenta en la próxima vuelta */
+              }
+            }
           }
         }
       } finally {

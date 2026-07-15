@@ -69,5 +69,32 @@ export function shouldReplyToEmail(input: {
   if (REMITENTES_AUTOMATICOS.test(from)) return { reply: false, reason: 'remitente_automatico' };
   if (ASUNTOS_AUTOMATICOS.test(subject)) return { reply: false, reason: 'asunto_automatico' };
 
+  // El From de un mail se falsifica trivialmente. El servidor que lo recibe (DonWeb,
+  // Gmail, etc.) corre SPF/DKIM y deja el veredicto en Authentication-Results.
+  const auth = authResult(h['authentication-results']);
+  if (auth === 'fail') return { reply: false, reason: 'spf_dkim_fail' };
+
   return { reply: true };
+}
+
+/**
+ * Lee el veredicto de SPF/DKIM que dejó el servidor receptor.
+ *
+ * Devuelve 'fail' SOLO si ambos mecanismos disponibles fallaron: un DKIM que falla
+ * mientras SPF pasa es normal en listas y reenvíos legítimos. Y la ausencia del
+ * header NO es una falla: muchos servidores no lo agregan — no podemos rechazar
+ * mails reales por eso.
+ */
+export function authResult(header: string | undefined): 'pass' | 'fail' | 'desconocido' {
+  if (!header) return 'desconocido';
+  const h = header.toLowerCase();
+  const spf = /\bspf=(\w+)/.exec(h)?.[1];
+  const dkim = /\bdkim=(\w+)/.exec(h)?.[1];
+  const dmarc = /\bdmarc=(\w+)/.exec(h)?.[1];
+
+  // DMARC es el veredicto compuesto: si el dominio lo publica y falla, es falsificación.
+  if (dmarc === 'fail') return 'fail';
+  if (spf === 'pass' || dkim === 'pass' || dmarc === 'pass') return 'pass';
+  if (spf === 'fail' && (dkim === 'fail' || dkim === undefined)) return 'fail';
+  return 'desconocido';
 }

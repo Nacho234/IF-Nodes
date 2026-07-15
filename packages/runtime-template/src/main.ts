@@ -31,6 +31,7 @@ import { CronScheduler } from './cron';
 import { InboundBatcher, debounceMsFromEnv } from './batcher';
 import { checkApiKey, checkWhatsAppSignature, checkEmailWebhookToken, RateLimiter } from './security';
 import { ImapPoller, imapConfigFromEnv } from './imap';
+import { importEmailHistory } from './import-history';
 
 /** Campos aceptados por POST /campaigns/run (el filtro va plano, ver README). */
 const CAMPAIGN_BODY_KEYS = new Set([
@@ -214,7 +215,7 @@ async function main(): Promise<void> {
   });
 
   /** Endpoints que exponen o mueven datos: exigen RUNTIME_API_KEY. */
-  const PROTEGIDOS = ['/conversations/reply', '/conversations/history', '/campaigns/run', '/run', '/flows'];
+  const PROTEGIDOS = ['/conversations/reply', '/conversations/history', '/conversations/import-history', '/campaigns/run', '/run', '/flows'];
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -365,6 +366,37 @@ async function main(): Promise<void> {
       const limit = Math.min(Number(url.searchParams.get('limit') ?? 50) || 50, 200);
       const r = await project.services.memory?.loadHistory({ channel, contact, limit });
       return send(res, 200, { channel, contact, status: r?.status ?? 'open', turns: r?.turns ?? [] });
+    }
+
+    // Importa el histórico de la casilla del equipo al historial del bot.
+    // De solo lectura sobre la casilla; dryRun por defecto para ver el conteo antes.
+    if (path === '/conversations/import-history' && method === 'POST') {
+      const cfg = imapConfigFromEnv();
+      if (!cfg) return send(res, 503, { error: 'imap_no_configurado', message: 'Definí IMAP_HOST/IMAP_USER/IMAP_PASSWORD.' });
+      let body: Record<string, unknown> = {};
+      try {
+        const { json } = await readBody(req);
+        if (json && typeof json === 'object') body = json as Record<string, unknown>;
+      } catch {
+        return send(res, 413, { error: 'payload_too_large' });
+      }
+      const dryRun = body.dryRun !== false; // hay que pedir explícitamente escribir
+      try {
+        const r = await importEmailHistory(
+          cfg,
+          store,
+          {
+            dryRun,
+            since: typeof body.since === 'string' ? body.since : undefined,
+            limit: typeof body.limit === 'number' ? body.limit : undefined,
+          },
+          log,
+        );
+        return send(res, 200, { status: 'ok', ...r });
+      } catch (error) {
+        log('error', 'Falló la importación del histórico', { error: error instanceof Error ? error.message : String(error) });
+        return send(res, 500, { error: 'import_failed', message: error instanceof Error ? error.message : 'error' });
+      }
     }
 
     // Lanzador de campañas: fan-out por contacto sobre el flujo de campaña

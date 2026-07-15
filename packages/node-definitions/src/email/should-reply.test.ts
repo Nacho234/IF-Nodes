@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldReplyToEmail } from './should-reply';
+import { shouldReplyToEmail, authResult } from './should-reply';
 
 const ok = { from: 'ana@agencia.com', subject: 'Consulta sobre el festival' };
 
@@ -52,7 +52,43 @@ describe('shouldReplyToEmail', () => {
     expect(shouldReplyToEmail({ from: 'no-es-mail' }).reply).toBe(false);
   });
 
+  it('NO contesta si el servidor marcó el remitente como falsificado', () => {
+    const falsificado = 'mx.donweb.com; spf=fail smtp.mailfrom=agencia.com; dkim=fail';
+    expect(shouldReplyToEmail({ ...ok, headers: { 'authentication-results': falsificado } })).toEqual({
+      reply: false, reason: 'spf_dkim_fail',
+    });
+    expect(shouldReplyToEmail({ ...ok, headers: { 'authentication-results': 'mx; dmarc=fail' } }).reply).toBe(false);
+  });
+
+  it('SÍ contesta si SPF/DKIM pasan, o si el servidor no dejó veredicto', () => {
+    expect(shouldReplyToEmail({ ...ok, headers: { 'authentication-results': 'mx; spf=pass; dkim=pass' } }).reply).toBe(true);
+    expect(shouldReplyToEmail({ ...ok, headers: {} }).reply).toBe(true);           // sin header no es falla
+    // Reenvíos legítimos rompen DKIM pero mantienen SPF: no se pueden rechazar.
+    expect(shouldReplyToEmail({ ...ok, headers: { 'authentication-results': 'mx; spf=pass; dkim=fail' } }).reply).toBe(true);
+  });
+
   it('no confunde a una agencia que se llama "news" con un newsletter', () => {
     expect(shouldReplyToEmail({ ...ok, from: 'juan@newsagency.com' }).reply).toBe(true);
+  });
+});
+
+describe('authResult', () => {
+  it('sin header no hay veredicto (no es falla)', () => {
+    expect(authResult(undefined)).toBe('desconocido');
+    expect(authResult('')).toBe('desconocido');
+  });
+  it('pass si cualquiera de los tres pasa', () => {
+    expect(authResult('mx; spf=pass')).toBe('pass');
+    expect(authResult('mx; dkim=pass header.d=x.com')).toBe('pass');
+    expect(authResult('mx; dmarc=pass')).toBe('pass');
+  });
+  it('fail solo cuando de verdad falló', () => {
+    expect(authResult('mx; spf=fail; dkim=fail')).toBe('fail');
+    expect(authResult('mx; dmarc=fail')).toBe('fail');       // dmarc manda
+    expect(authResult('mx; spf=pass; dmarc=fail')).toBe('fail');
+  });
+  it('spf=neutral / softfail no alcanzan para rechazar', () => {
+    expect(authResult('mx; spf=neutral')).toBe('desconocido');
+    expect(authResult('mx; spf=softfail')).toBe('desconocido');
   });
 });
