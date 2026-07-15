@@ -238,8 +238,9 @@ export function gitignore(): string {
     '.env.*',
     '*.log',
     '.DS_Store',
-    '# Datos personales de los contactos: no versionar.',
+    '# Datos personales: contactos y conversaciones reales. No versionar.',
     'workflow/contacts.json',
+    'workflow/conversations.json',
     '',
   ].join('\n');
 }

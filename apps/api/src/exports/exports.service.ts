@@ -287,6 +287,19 @@ export class ExportsService {
       });
       await writeFile(resolve(projectDir, 'workflow', 'contacts.json'), JSON.stringify(contacts, null, 2));
 
+      // Semilla del historial: sin esto el bot desplegado arranca amnésico y no
+      // recuerda ninguna de las charlas que el equipo ya tuvo con cada contacto.
+      const threads = await this.prisma.client.conversation.findMany({
+        where: { projectId },
+        select: {
+          channel: true,
+          contact: true,
+          status: true,
+          messages: { select: { role: true, text: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
+        },
+      });
+      await writeFile(resolve(projectDir, 'workflow', 'conversations.json'), JSON.stringify(threads, null, 2));
+
       // 3. Archivos del proyecto
       await writeFile(resolve(projectDir, 'package.json'), packageJson(plan));
       await writeFile(resolve(projectDir, 'Dockerfile'), dockerfile());

@@ -33,6 +33,14 @@ export interface ContactSeed {
   data?: Record<string, unknown> | null;
 }
 
+/** Hilo de conversación que viaja en el export (conversations.json) para sembrar la memoria. */
+export interface ConversationSeed {
+  channel: string;
+  contact: string;
+  status?: string;
+  messages: { role: string; text: string; createdAt?: string }[];
+}
+
 export interface RuntimeStore {
   memoryLoad(channel: string, contact: string, limit: number): Promise<{ turns: ConversationTurn[]; status: string }>;
   memorySave(channel: string, contact: string, role: string, text: string): Promise<void>;
@@ -42,6 +50,8 @@ export interface RuntimeStore {
   listContacts(filter: ContactListFilter): Promise<ContactRecord[]>;
   /** Carga inicial de contactos (solo si el CRM está vacío). Idempotente. */
   seedContacts(contacts: ContactSeed[]): Promise<{ seeded: number; skipped: boolean }>;
+  /** Carga inicial del historial (solo si no hay ninguna conversación). Idempotente. */
+  seedConversations(threads: ConversationSeed[]): Promise<{ seeded: number; turns: number; skipped: boolean }>;
   init?(): Promise<void>;
 }
 
@@ -131,6 +141,19 @@ export class InMemoryStore implements RuntimeStore {
       if (this.contacts.length > before) seeded += 1;
     }
     return { seeded, skipped: false };
+  }
+  async seedConversations(threads: ConversationSeed[]) {
+    if (this.turns.size > 0) return { seeded: 0, turns: 0, skipped: true };
+    let seeded = 0, turns = 0;
+    for (const t of threads) {
+      if (!t.contact || !t.messages?.length) continue;
+      const k = this.key(t.channel, t.contact);
+      this.turns.set(k, t.messages.map((m) => ({ role: m.role as ConversationTurn['role'], text: m.text })));
+      if (t.status) this.status.set(k, t.status);
+      seeded += 1;
+      turns += t.messages.length;
+    }
+    return { seeded, turns, skipped: false };
   }
 }
 
@@ -330,6 +353,36 @@ export class PostgresStore implements RuntimeStore {
       seeded += r.rowCount ?? 0;
     }
     return { seeded, skipped: false };
+  }
+  /**
+   * Siembra el historial SOLO si no hay ninguna conversación: una vez desplegado,
+   * las charlas las escribe el bot y un redeploy no puede pisarlas.
+   */
+  async seedConversations(threads: ConversationSeed[]) {
+    const existing = await this.pool.query<{ n: string }>('SELECT COUNT(*)::text AS n FROM ifn_conversations');
+    if (Number(existing.rows[0]?.n ?? '0') > 0) return { seeded: 0, turns: 0, skipped: true };
+
+    let seeded = 0, turns = 0;
+    for (const t of threads) {
+      if (!t.contact || !t.messages?.length) continue;
+      const last = t.messages[t.messages.length - 1]?.createdAt;
+      await this.pool.query(
+        `INSERT INTO ifn_conversations (channel, contact, status, last_message_at)
+         VALUES ($1, $2, $3, COALESCE($4::timestamptz, now()))
+         ON CONFLICT (channel, contact) DO NOTHING`,
+        [t.channel, t.contact, t.status ?? 'open', last ?? null],
+      );
+      for (const m of t.messages) {
+        await this.pool.query(
+          `INSERT INTO ifn_messages (channel, contact, role, text, created_at)
+           VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, now()))`,
+          [t.channel, t.contact, m.role, m.text, m.createdAt ?? null],
+        );
+        turns += 1;
+      }
+      seeded += 1;
+    }
+    return { seeded, turns, skipped: false };
   }
 }
 

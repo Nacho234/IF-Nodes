@@ -25,7 +25,7 @@ import {
   type LoadedProject,
 } from './runtime';
 import type { CredentialManifest } from './services';
-import { createRuntimeStore, type ContactSeed } from './store';
+import { createRuntimeStore, type ContactSeed, type ConversationSeed } from './store';
 import { runCampaign } from './campaigns';
 import { CronScheduler } from './cron';
 import { ImapPoller, imapConfigFromEnv } from './imap';
@@ -95,6 +95,7 @@ async function main(): Promise<void> {
   const credentials = tryReadJson<CredentialManifest>('credentials.json', {});
   const knowledge = tryReadJson<{ id: string; title: string | null; content: string }[]>('knowledge.json', []);
   const contactSeed = tryReadJson<ContactSeed[]>('contacts.json', []);
+  const historySeed = tryReadJson<ConversationSeed[]>('conversations.json', []);
 
   const missing = manifest.requiredEnvironmentVariables.filter((name) => !process.env[name]);
   if (missing.length > 0) log('warn', 'Faltan variables de entorno requeridas', { missing });
@@ -112,6 +113,12 @@ async function main(): Promise<void> {
     const { seeded, skipped } = await store.seedContacts(contactSeed);
     if (skipped) log('info', 'CRM ya poblado: se omite la carga inicial de contactos', { disponibles: contactSeed.length });
     else log('info', 'CRM sembrado con la carga inicial de contactos', { seeded, disponibles: contactSeed.length });
+  }
+
+  if (historySeed.length > 0) {
+    const { seeded, turns, skipped } = await store.seedConversations(historySeed);
+    if (skipped) log('info', 'Ya hay conversaciones: se omite la carga inicial del historial', { disponibles: historySeed.length });
+    else log('info', 'Historial sembrado: el bot arranca recordando las charlas previas', { hilos: seeded, turnos: turns });
   }
 
   const project: LoadedProject = loadProject(bundles, manifest, credentials, knowledge, store);
