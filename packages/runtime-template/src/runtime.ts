@@ -97,6 +97,11 @@ export function whatsappFlow(project: LoadedProject): RuntimeFlow | null {
   return project.flows.find((f) => f.triggerType === 'trigger.whatsapp-message') ?? null;
 }
 
+/** Flujo que atiende mails entrantes (POST /webhooks/email). */
+export function emailFlow(project: LoadedProject): RuntimeFlow | null {
+  return project.flows.find((f) => f.triggerType === 'trigger.email-message') ?? null;
+}
+
 export function campaignFlows(project: LoadedProject): RuntimeFlow[] {
   return project.flows.filter((f) => f.triggerType === 'trigger.campaign-contact');
 }

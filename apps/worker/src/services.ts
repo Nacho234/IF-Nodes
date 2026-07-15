@@ -493,7 +493,7 @@ function makeWhatsAppService(ctx: ServiceContext): NodeServices['whatsapp'] {
 
 /* ── Memoria de conversación (persistida en la DB) ──────────── */
 
-const ROLE_LABEL: Record<string, string> = { user: 'Cliente', assistant: 'Bot', system: 'Sistema' };
+const ROLE_LABEL: Record<string, string> = { user: 'Cliente', assistant: 'Bot', system: 'Sistema', operator: 'Coordinador' };
 
 function formatTranscript(turns: ConversationTurn[]): string {
   return turns.map((t) => `${ROLE_LABEL[t.role] ?? t.role}: ${t.text}`).join('\n');

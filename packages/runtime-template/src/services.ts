@@ -237,7 +237,7 @@ function devEchoChat(input: AIChatInput): AIChatResult {
  * para persistencia real se conecta una DB en una fase futura. El store es a
  * nivel de módulo para sobrevivir entre requests dentro del mismo proceso.
  */
-const ROLE_LABEL: Record<string, string> = { user: 'Cliente', assistant: 'Bot', system: 'Sistema' };
+const ROLE_LABEL: Record<string, string> = { user: 'Cliente', assistant: 'Bot', system: 'Sistema', operator: 'Coordinador' };
 const memoryKey = (channel: string, contact: string) => `${channel}:${contact}`;
 
 export function buildRuntimeServices(

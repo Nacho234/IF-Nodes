@@ -8,13 +8,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { parseWhatsAppWebhook } from '@ifnodes/node-definitions';
+import { parseWhatsAppWebhook, parseInboundEmail } from '@ifnodes/node-definitions';
 import {
   loadProject,
   runProjectFlow,
   replyFromResult,
   inboundFlow,
   whatsappFlow,
+  emailFlow,
   campaignFlows,
   scheduleFlows,
   scheduleConfig,
@@ -27,6 +28,7 @@ import type { CredentialManifest } from './services';
 import { createRuntimeStore, type ContactSeed } from './store';
 import { runCampaign } from './campaigns';
 import { CronScheduler } from './cron';
+import { ImapPoller, imapConfigFromEnv } from './imap';
 
 /** Campos aceptados por POST /campaigns/run (el filtro va plano, ver README). */
 const CAMPAIGN_BODY_KEYS = new Set([
@@ -115,6 +117,7 @@ async function main(): Promise<void> {
   const project: LoadedProject = loadProject(bundles, manifest, credentials, knowledge, store);
   const inbound = inboundFlow(project);
   const wa = whatsappFlow(project);
+  const mail = emailFlow(project);
   log('info', 'Proyecto cargado', {
     project: manifest.project,
     flows: project.flows.map((f) => ({ slug: f.slug, trigger: f.triggerType })),
@@ -139,6 +142,26 @@ async function main(): Promise<void> {
     log(ok ? 'info' : 'warn', ok ? 'Cron registrado' : 'Cron inválido, se ignora', { flow: flow.slug, cron: cfg.cron });
   }
   scheduler.start();
+
+  // Mail entrante por IMAP: si hay casilla configurada, el bot va a buscar los mails.
+  // Sin IMAP_HOST el bot igual anda: recibe por /webhooks/email o no recibe mail.
+  const imapCfg = imapConfigFromEnv();
+  if (imapCfg && mail) {
+    new ImapPoller(
+      imapCfg,
+      async (message) => {
+        const started = Date.now();
+        const result = await runProjectFlow(project, mail, message as unknown as Record<string, unknown>);
+        log('info', 'Mail procesado', { from: message.from, status: result.status, ms: Date.now() - started });
+      },
+      log,
+    ).start();
+  } else if (imapCfg && !mail) {
+    log('warn', 'Hay casilla IMAP configurada pero ningún flujo con disparador "Mail recibido": los mails no se van a atender.');
+  } else if (mail) {
+    log('info', 'Flujo de mail listo, sin casilla IMAP: definí IMAP_HOST/IMAP_USER/IMAP_PASSWORD para recibir, o posteá a /webhooks/email.');
+  }
+
 
   const server = createServer((req, res) => {
     void handle(req, res).catch((error) => {
@@ -199,6 +222,74 @@ async function main(): Promise<void> {
         log('info', 'Mensaje de WhatsApp procesado', { from: message.phone, status: result.status, ms: Date.now() - started });
       }
       return send(res, 200, { status: 'ok', processed: messages.length });
+    }
+
+    // Mail entrante: cualquier transporte (Gmail, IMAP, proveedor) postea el mail crudo acá.
+    if (path === '/webhooks/email' && method === 'POST' && mail) {
+      let payload: unknown;
+      try {
+        payload = await readBody(req);
+      } catch {
+        return send(res, 413, { error: 'payload_too_large' });
+      }
+      const message = parseInboundEmail(payload);
+      if (!message) return send(res, 400, { error: 'unparseable_email', message: 'Sin remitente válido no hay hilo posible.' });
+      const started = Date.now();
+      const result = await runProjectFlow(project, mail, message as unknown as Record<string, unknown>);
+      log('info', 'Mail procesado', { from: message.from, status: result.status, ms: Date.now() - started });
+      return send(res, 200, { status: 'ok', from: message.from });
+    }
+
+    // El operador toma el mando: manda un mensaje escrito por una persona y lo deja
+    // en el mismo historial que usa el bot. Sin esto, el handoff obliga al coordinador
+    // a contestar desde su celular y el bot pierde el contexto de lo que se habló.
+    if (path === '/conversations/reply' && method === 'POST') {
+      let body: Record<string, unknown> = {};
+      try {
+        const raw = await readBody(req);
+        if (raw && typeof raw === 'object') body = raw as Record<string, unknown>;
+      } catch {
+        return send(res, 413, { error: 'payload_too_large' });
+      }
+      const channel = String(body.channel ?? '');
+      const contact = String(body.contact ?? '');
+      const text = String(body.text ?? '');
+      if (!contact || !text || (channel !== 'whatsapp' && channel !== 'email')) {
+        return send(res, 400, {
+          error: 'invalid_reply',
+          message: 'Requiere channel ("whatsapp" | "email"), contact y text.',
+        });
+      }
+
+      const services = project.services;
+      let simulated: boolean | undefined;
+      if (channel === 'whatsapp') {
+        if (!services.whatsapp) return send(res, 503, { error: 'whatsapp_unavailable' });
+        simulated = (await services.whatsapp.sendText({ to: contact, text })).simulated;
+      } else {
+        if (!services.email) return send(res, 503, { error: 'email_unavailable' });
+        simulated = (await services.email.send({ to: contact, subject: String(body.subject ?? 'FePI'), text })).simulated;
+      }
+
+      // El turno queda como "operator": el bot lo lee como lado propio y no se contradice.
+      await services.memory?.saveTurn({ channel, contact, role: 'operator', text });
+
+      // Por defecto el humano se queda con la conversación. status:"open" se la devuelve al bot.
+      const status = body.status === 'open' || body.status === 'closed' ? String(body.status) : 'handoff';
+      await services.memory?.setStatus({ channel, contact, status });
+
+      log('info', 'Respuesta del operador enviada', { channel, contact, status, simulated });
+      return send(res, 200, { status: 'ok', channel, contact, conversationStatus: status, simulated });
+    }
+
+    // Historial de una conversación, para que el panel la muestre.
+    if (path === '/conversations/history' && method === 'GET') {
+      const channel = url.searchParams.get('channel') ?? '';
+      const contact = url.searchParams.get('contact') ?? '';
+      if (!contact || !channel) return send(res, 400, { error: 'invalid_query', message: 'Requiere ?channel= y ?contact=' });
+      const limit = Math.min(Number(url.searchParams.get('limit') ?? 50) || 50, 200);
+      const r = await project.services.memory?.loadHistory({ channel, contact, limit });
+      return send(res, 200, { channel, contact, status: r?.status ?? 'open', turns: r?.turns ?? [] });
     }
 
     // Lanzador de campañas: fan-out por contacto sobre el flujo de campaña

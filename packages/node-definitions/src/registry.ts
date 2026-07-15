@@ -4,6 +4,7 @@ import { webhookTriggerNode } from './nodes/trigger/webhook-trigger';
 import { whatsappTriggerNode } from './nodes/trigger/whatsapp-trigger';
 import { scheduleTriggerNode } from './nodes/trigger/schedule-trigger';
 import { campaignTriggerNode } from './nodes/trigger/campaign-trigger';
+import { emailTriggerNode } from './nodes/trigger/email-trigger';
 import { conditionNode } from './nodes/logic/condition';
 import { switchNode } from './nodes/logic/switch';
 import { setVariableNode } from './nodes/logic/set-variable';
@@ -35,6 +36,7 @@ const definitions = [
   manualTriggerNode,
   webhookTriggerNode,
   whatsappTriggerNode,
+  emailTriggerNode,
   scheduleTriggerNode,
   campaignTriggerNode,
   conditionNode,

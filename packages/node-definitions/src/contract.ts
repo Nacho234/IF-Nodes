@@ -271,7 +271,8 @@ export interface KnowledgeService {
 
 /* ── Memoria de conversación ─────────────────────────────────── */
 
-export type ConversationRole = 'user' | 'assistant' | 'system';
+/** 'operator' = lo escribió una persona del equipo desde el panel, no el bot. */
+export type ConversationRole = 'user' | 'assistant' | 'system' | 'operator';
 
 export interface ConversationTurn {
   role: ConversationRole;

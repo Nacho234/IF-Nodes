@@ -4,7 +4,7 @@ import { defineNode } from '../../contract';
 const configSchema = z.object({
   channel: z.string().min(1).max(40).default('whatsapp'),
   contact: z.string().min(1).max(200).default('{{trigger.phone}}'),
-  role: z.enum(['user', 'assistant']).default('assistant'),
+  role: z.enum(['user', 'assistant', 'operator']).default('assistant'),
   text: z.string().max(10_000).default('{{trigger.text}}'),
 });
 
