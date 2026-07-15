@@ -28,6 +28,7 @@ import type { CredentialManifest } from './services';
 import { createRuntimeStore, type ContactSeed, type ConversationSeed } from './store';
 import { runCampaign } from './campaigns';
 import { CronScheduler } from './cron';
+import { InboundBatcher, debounceMsFromEnv } from './batcher';
 import { checkApiKey, checkWhatsAppSignature, checkEmailWebhookToken, RateLimiter } from './security';
 import { ImapPoller, imapConfigFromEnv } from './imap';
 
@@ -151,6 +152,22 @@ async function main(): Promise<void> {
 
   // Scheduler: registra un job cron por cada flujo "Programado"
   const rateLimiter = new RateLimiter();
+
+  /**
+   * La gente manda "hola", "queria consultar", "por las categorias" como tres
+   * mensajes en dos segundos. Se agrupan en uno y el bot contesta una sola vez.
+   */
+  const waBatcher = new InboundBatcher<Record<string, unknown>>(
+    debounceMsFromEnv(),
+    (msgs) => ({ ...msgs[msgs.length - 1], text: msgs.map((m) => String(m.text ?? '')).filter(Boolean).join('\n') }),
+    async (message) => {
+      if (!wa) return;
+      const started = Date.now();
+      const result = await runProjectFlow(project, wa, message);
+      log('info', 'Mensaje de WhatsApp procesado', { from: message.phone, status: result.status, ms: Date.now() - started });
+    },
+    log,
+  );
   const scheduler = new CronScheduler();
   for (const flow of scheduleFlows(project)) {
     const cfg = scheduleConfig(flow);
@@ -268,12 +285,12 @@ async function main(): Promise<void> {
         return send(res, 401, { error: 'invalid_signature' });
       }
       const messages = parseWhatsAppWebhook(payload);
+      // Se encola y se responde 200 ya: Meta reintenta si tardamos, y así los
+      // mensajes seguidos del mismo contacto se agrupan en una sola respuesta.
       for (const message of messages) {
-        const started = Date.now();
-        const result = await runProjectFlow(project, wa, message as unknown as Record<string, unknown>);
-        log('info', 'Mensaje de WhatsApp procesado', { from: message.phone, status: result.status, ms: Date.now() - started });
+        waBatcher.push(message.phone, message as unknown as Record<string, unknown>);
       }
-      return send(res, 200, { status: 'ok', processed: messages.length });
+      return send(res, 200, { status: 'ok', queued: messages.length });
     }
 
     // Mail entrante: cualquier transporte (Gmail, IMAP, proveedor) postea el mail crudo acá.
